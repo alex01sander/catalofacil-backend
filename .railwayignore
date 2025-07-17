@@ -1,0 +1,47 @@
+# Arquivos de desenvolvimento
+node_modules
+.git
+.gitignore
+README.md
+README-PRODUCAO.md
+deploy.sh
+backup.sh
+
+# Arquivos Docker (não necessários no Railway)
+dockerfile
+docker-compose.yml
+.dockerignore
+
+# Arquivos de ambiente local
+.env
+.env.local
+.env.development
+
+# Logs e arquivos temporários
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store
+Thumbs.db
+
+# Arquivos de backup
+backup_*.sql
+backup_*.sql.gz
+
+# Arquivos de IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Arquivos de teste
+coverage
+.nyc_output
+test
+tests
+__tests__
+*.test.js
+*.test.ts
+*.spec.js
+*.spec.ts 

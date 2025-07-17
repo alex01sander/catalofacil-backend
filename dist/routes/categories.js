@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const client_1 = require("@prisma/client");
+const zod_1 = require("../zod");
 const router = (0, express_1.Router)();
 const prisma = new client_1.PrismaClient();
 // Listar todas as categorias
@@ -21,8 +22,12 @@ router.get('/:id', async (req, res) => {
 });
 // Criar categoria
 router.post('/', async (req, res) => {
+    const parse = zod_1.categoriesCreateInputSchema.safeParse(req.body);
+    if (!parse.success) {
+        return res.status(400).json({ error: 'Dados inválidos', details: parse.error.issues });
+    }
     try {
-        const nova = await prisma.categories.create({ data: req.body });
+        const nova = await prisma.categories.create({ data: parse.data });
         res.status(201).json(nova);
     }
     catch (e) {
@@ -31,10 +36,14 @@ router.post('/', async (req, res) => {
 });
 // Atualizar categoria
 router.put('/:id', async (req, res) => {
+    const parse = zod_1.categoriesUpdateInputSchema.safeParse(req.body);
+    if (!parse.success) {
+        return res.status(400).json({ error: 'Dados inválidos', details: parse.error.issues });
+    }
     try {
         const atualizada = await prisma.categories.update({
             where: { id: req.params.id },
-            data: req.body,
+            data: parse.data,
         });
         res.json(atualizada);
     }

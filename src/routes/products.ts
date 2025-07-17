@@ -3,69 +3,89 @@ import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
 import authenticateJWT from '../middleware/auth';
 import { productsCreateInputSchema, productsUpdateInputSchema } from '../zod';
+
 const prisma = new PrismaClient();
 const router = Router();
 
-// Criar produto (privado)
+// Criar produto
 router.post('/', authenticateJWT, async (req, res) => {
   const parse = productsCreateInputSchema.safeParse(req.body);
   if (!parse.success) {
     return res.status(400).json({ error: 'Dados inválidos', details: parse.error.issues });
   }
-  const { title, description, price, imageUrl, domainId } = parse.data;
-  const domain = await prisma.domain.findUnique({ where: { id: domainId } });
-  if (!domain || !req.user || domain.userId !== req.user.id) {
-    return res.status(403).json({ error: 'Acesso negado ao domínio' });
+  
+  try {
+    const product = await prisma.products.create({
+      data: parse.data
+    });
+    res.status(201).json(product);
+  } catch (error) {
+    console.error('Erro ao criar produto:', error);
+    res.status(500).json({ error: 'Erro interno do servidor' });
   }
-  const product = await prisma.product.create({
-    data: { title, description, price, imageUrl, domainId }
-  });
-  res.json(product);
 });
 
-// Editar produto (privado)
+// Listar produtos
+router.get('/', async (req, res) => {
+  try {
+    const products = await prisma.products.findMany({
+      where: { is_active: true }
+    });
+    res.json(products);
+  } catch (error) {
+    console.error('Erro ao listar produtos:', error);
+    res.status(500).json({ error: 'Erro interno do servidor' });
+  }
+});
+
+// Buscar produto por ID
+router.get('/:id', async (req, res) => {
+  try {
+    const product = await prisma.products.findUnique({
+      where: { id: req.params.id }
+    });
+    
+    if (!product) {
+      return res.status(404).json({ error: 'Produto não encontrado' });
+    }
+    
+    res.json(product);
+  } catch (error) {
+    console.error('Erro ao buscar produto:', error);
+    res.status(500).json({ error: 'Erro interno do servidor' });
+  }
+});
+
+// Atualizar produto
 router.put('/:id', authenticateJWT, async (req, res) => {
   const parse = productsUpdateInputSchema.safeParse(req.body);
   if (!parse.success) {
     return res.status(400).json({ error: 'Dados inválidos', details: parse.error.issues });
   }
-  const { id } = req.params;
-  const { title, description, price, imageUrl } = parse.data;
-  const product = await prisma.product.findUnique({ where: { id } });
-  if (!product) return res.status(404).json({ error: 'Produto não encontrado' });
-  const domain = await prisma.domain.findUnique({ where: { id: product.domainId } });
-  if (!domain || !req.user || domain.userId !== req.user.id) {
-    return res.status(403).json({ error: 'Acesso negado ao domínio' });
+  
+  try {
+    const product = await prisma.products.update({
+      where: { id: req.params.id },
+      data: parse.data
+    });
+    res.json(product);
+  } catch (error) {
+    console.error('Erro ao atualizar produto:', error);
+    res.status(500).json({ error: 'Erro interno do servidor' });
   }
-  const updated = await prisma.product.update({
-    where: { id },
-    data: { title, description, price, imageUrl }
-  });
-  res.json(updated);
 });
 
-// Deletar produto (privado)
+// Deletar produto
 router.delete('/:id', authenticateJWT, async (req, res) => {
-  const { id } = req.params;
-  const product = await prisma.product.findUnique({ where: { id } });
-  if (!product) return res.status(404).json({ error: 'Produto não encontrado' });
-  const domain = await prisma.domain.findUnique({ where: { id: product.domainId } });
-  if (!domain || !req.user || domain.userId !== req.user.id) {
-    return res.status(403).json({ error: 'Acesso negado ao domínio' });
+  try {
+    await prisma.products.delete({
+      where: { id: req.params.id }
+    });
+    res.status(204).send();
+  } catch (error) {
+    console.error('Erro ao deletar produto:', error);
+    res.status(500).json({ error: 'Erro interno do servidor' });
   }
-  await prisma.product.delete({ where: { id } });
-  res.json({ success: true });
-});
-
-// Listar produtos do usuário autenticado
-router.get('/', authenticateJWT, async (req, res) => {
-  if (!req.user) return res.status(401).json({ error: 'Não autenticado' });
-  // Buscar todos os domínios do usuário
-  const domains = await prisma.domain.findMany({ where: { userId: req.user.id } });
-  const domainIds = domains.map((d: { id: string }) => d.id);
-  // Buscar produtos desses domínios
-  const products = await prisma.product.findMany({ where: { domainId: { in: domainIds } } });
-  res.json(products);
 });
 
 export default router;

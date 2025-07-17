@@ -2,59 +2,67 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const client_1 = require("@prisma/client");
+const zod_1 = require("../zod");
 const router = (0, express_1.Router)();
 const prisma = new client_1.PrismaClient();
 // Listar todas as vendas
 router.get('/', async (req, res) => {
-    const vendas = await prisma.sales.findMany({ include: { stores: true } });
-    res.json(vendas);
+    try {
+        const vendas = await prisma.sales.findMany({ include: { stores: true } });
+        res.json(vendas);
+    }
+    catch (error) {
+        console.error('Erro ao listar vendas:', error);
+        res.status(500).json({ error: 'Erro interno do servidor' });
+    }
 });
 // Buscar venda por ID
 router.get('/:id', async (req, res) => {
-    const venda = await prisma.sales.findUnique({
-        where: { id: req.params.id },
-        include: { stores: true }
-    });
-    if (!venda)
-        return res.status(404).json({ error: 'Venda não encontrada' });
-    res.json(venda);
+    try {
+        const venda = await prisma.sales.findUnique({
+            where: { id: req.params.id },
+            include: { stores: true }
+        });
+        if (!venda)
+            return res.status(404).json({ error: 'Venda não encontrada' });
+        res.json(venda);
+    }
+    catch (error) {
+        console.error('Erro ao buscar venda:', error);
+        res.status(500).json({ error: 'Erro interno do servidor' });
+    }
 });
 // Criar venda
 router.post('/', async (req, res) => {
+    const parse = zod_1.salesCreateInputSchema.safeParse(req.body);
+    if (!parse.success) {
+        return res.status(400).json({ error: 'Dados inválidos', details: parse.error.issues });
+    }
     try {
-        const { product_id, ...saleData } = req.body;
-        const nova = await prisma.sales.create({ data: saleData });
-        // Atualizar estoque do produto
-        if (product_id) {
-            const produto = await prisma.products.findUnique({ where: { id: product_id } });
-            if (produto) {
-                const novoEstoque = produto.stock - Number(saleData.quantity);
-                await prisma.products.update({
-                    where: { id: product_id },
-                    data: {
-                        stock: novoEstoque,
-                        is_active: novoEstoque > 0
-                    }
-                });
-            }
-        }
+        const nova = await prisma.sales.create({ data: parse.data });
         res.status(201).json(nova);
     }
-    catch (e) {
-        res.status(400).json({ error: 'Erro ao criar venda', details: e });
+    catch (error) {
+        console.error('Erro ao criar venda:', error);
+        res.status(500).json({ error: 'Erro interno do servidor' });
     }
 });
 // Atualizar venda
 router.put('/:id', async (req, res) => {
+    const parse = zod_1.salesUpdateInputSchema.safeParse(req.body);
+    if (!parse.success) {
+        return res.status(400).json({ error: 'Dados inválidos', details: parse.error.issues });
+    }
     try {
         const atualizada = await prisma.sales.update({
             where: { id: req.params.id },
-            data: req.body,
+            data: parse.data,
         });
         res.json(atualizada);
     }
-    catch (e) {
-        res.status(400).json({ error: 'Erro ao atualizar venda', details: e });
+    catch (error) {
+        console.error('Erro ao atualizar venda:', error);
+        res.status(500).json({ error: 'Erro interno do servidor' });
     }
 });
 // Deletar venda
@@ -63,8 +71,9 @@ router.delete('/:id', async (req, res) => {
         await prisma.sales.delete({ where: { id: req.params.id } });
         res.status(204).send();
     }
-    catch (e) {
-        res.status(400).json({ error: 'Erro ao deletar venda', details: e });
+    catch (error) {
+        console.error('Erro ao deletar venda:', error);
+        res.status(500).json({ error: 'Erro interno do servidor' });
     }
 });
 exports.default = router;
