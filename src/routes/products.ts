@@ -2,12 +2,17 @@
 import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
 import authenticateJWT from '../middleware/auth';
+import { productsCreateInputSchema, productsUpdateInputSchema } from '../zod';
 const prisma = new PrismaClient();
 const router = Router();
 
 // Criar produto (privado)
 router.post('/', authenticateJWT, async (req, res) => {
-  const { title, description, price, imageUrl, domainId } = req.body;
+  const parse = productsCreateInputSchema.safeParse(req.body);
+  if (!parse.success) {
+    return res.status(400).json({ error: 'Dados inválidos', details: parse.error.issues });
+  }
+  const { title, description, price, imageUrl, domainId } = parse.data;
   const domain = await prisma.domain.findUnique({ where: { id: domainId } });
   if (!domain || !req.user || domain.userId !== req.user.id) {
     return res.status(403).json({ error: 'Acesso negado ao domínio' });
@@ -20,8 +25,12 @@ router.post('/', authenticateJWT, async (req, res) => {
 
 // Editar produto (privado)
 router.put('/:id', authenticateJWT, async (req, res) => {
+  const parse = productsUpdateInputSchema.safeParse(req.body);
+  if (!parse.success) {
+    return res.status(400).json({ error: 'Dados inválidos', details: parse.error.issues });
+  }
   const { id } = req.params;
-  const { title, description, price, imageUrl } = req.body;
+  const { title, description, price, imageUrl } = parse.data;
   const product = await prisma.product.findUnique({ where: { id } });
   if (!product) return res.status(404).json({ error: 'Produto não encontrado' });
   const domain = await prisma.domain.findUnique({ where: { id: product.domainId } });

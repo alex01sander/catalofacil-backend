@@ -1,0 +1,15 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.domain_ownersUncheckedCreateInputObjectSchema = void 0;
+const zod_1 = require("zod");
+const Schema = zod_1.z
+    .object({
+    id: zod_1.z.string().optional(),
+    domain: zod_1.z.string(),
+    user_id: zod_1.z.string(),
+    created_at: zod_1.z.coerce.date().optional().nullable(),
+    updated_at: zod_1.z.coerce.date().optional().nullable(),
+    domain_type: zod_1.z.string().optional(),
+})
+    .strict();
+exports.domain_ownersUncheckedCreateInputObjectSchema = Schema;

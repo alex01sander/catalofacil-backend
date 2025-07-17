@@ -1,0 +1,20 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.NestedUuidNullableFilterObjectSchema = void 0;
+const zod_1 = require("zod");
+const Schema = zod_1.z
+    .object({
+    equals: zod_1.z.string().optional().nullable(),
+    in: zod_1.z.union([zod_1.z.string().array(), zod_1.z.string()]).optional().nullable(),
+    notIn: zod_1.z.union([zod_1.z.string().array(), zod_1.z.string()]).optional().nullable(),
+    lt: zod_1.z.string().optional(),
+    lte: zod_1.z.string().optional(),
+    gt: zod_1.z.string().optional(),
+    gte: zod_1.z.string().optional(),
+    not: zod_1.z
+        .union([zod_1.z.string(), zod_1.z.lazy(() => exports.NestedUuidNullableFilterObjectSchema)])
+        .optional()
+        .nullable(),
+})
+    .strict();
+exports.NestedUuidNullableFilterObjectSchema = Schema;

@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
+import { store_settingsCreateInputSchema, store_settingsUpdateInputSchema } from '../zod';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -28,8 +29,12 @@ router.get('/:id', async (req, res) => {
 
 // Criar configuração de loja
 router.post('/', async (req, res) => {
+  const parse = store_settingsCreateInputSchema.safeParse(req.body);
+  if (!parse.success) {
+    return res.status(400).json({ error: 'Dados inválidos', details: parse.error.issues });
+  }
   try {
-    const nova = await prisma.store_settings.create({ data: req.body });
+    const nova = await prisma.store_settings.create({ data: parse.data });
     res.status(201).json(nova);
   } catch (e) {
     res.status(400).json({ error: 'Erro ao criar configuração', details: e });
@@ -38,10 +43,14 @@ router.post('/', async (req, res) => {
 
 // Atualizar configuração de loja
 router.put('/:id', async (req, res) => {
+  const parse = store_settingsUpdateInputSchema.safeParse(req.body);
+  if (!parse.success) {
+    return res.status(400).json({ error: 'Dados inválidos', details: parse.error.issues });
+  }
   try {
     const atualizada = await prisma.store_settings.update({
       where: { id: req.params.id },
-      data: req.body,
+      data: parse.data,
     });
     res.json(atualizada);
   } catch (e) {

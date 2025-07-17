@@ -668,8 +668,10 @@ enum one_time_token_type {
 }
 
 generator zod {
-  provider = "prisma-zod-generator"
-  output   = "../src/zod" // ou outro caminho desejado
+  provider                 = "zod-prisma-types"
+  output                   = "../src/zod"
+  inputTypes               = true
+  useInputTypesForJson     = true
 }
 
 model User {

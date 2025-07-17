@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
+import { credit_transactionsCreateInputSchema, credit_transactionsUpdateInputSchema } from '../zod';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -22,12 +23,16 @@ router.get('/:id', async (req, res) => {
 
 // Criar transação de crédito
 router.post('/', async (req, res) => {
+  const parse = credit_transactionsCreateInputSchema.safeParse(req.body);
+  if (!parse.success) {
+    return res.status(400).json({ error: 'Dados inválidos', details: parse.error.issues });
+  }
   try {
     const user = (req as any).user;
     if (!user || !user.id) {
       return res.status(401).json({ error: 'Usuário não autenticado' });
     }
-    const { credit_account_id, type, amount, description } = req.body;
+    const { credit_account_id, type, amount, description } = parse.data;
 
     // Validação do credit_account_id
     const conta = await prisma.credit_accounts.findUnique({
@@ -70,20 +75,24 @@ router.post('/', async (req, res) => {
     }
     res.status(201).json(nova);
   } catch (e) {
-    res.status(400).json({ error: 'Erro ao criar transação', details: e });
+    res.status(400).json({ error: 'Erro ao criar transação de crédito', details: e });
   }
 });
 
 // Atualizar transação de crédito
 router.put('/:id', async (req, res) => {
+  const parse = credit_transactionsUpdateInputSchema.safeParse(req.body);
+  if (!parse.success) {
+    return res.status(400).json({ error: 'Dados inválidos', details: parse.error.issues });
+  }
   try {
     const atualizada = await prisma.credit_transactions.update({
       where: { id: req.params.id },
-      data: req.body,
+      data: parse.data,
     });
     res.json(atualizada);
   } catch (e) {
-    res.status(400).json({ error: 'Erro ao atualizar transação', details: e });
+    res.status(400).json({ error: 'Erro ao atualizar transação de crédito', details: e });
   }
 });
 

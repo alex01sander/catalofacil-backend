@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
+import { salesCreateInputSchema, salesUpdateInputSchema } from '../zod';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -22,16 +23,19 @@ router.get('/:id', async (req, res) => {
 
 // Criar venda
 router.post('/', async (req, res) => {
+  const parse = salesCreateInputSchema.safeParse(req.body);
+  if (!parse.success) {
+    return res.status(400).json({ error: 'Dados inválidos', details: parse.error.issues });
+  }
   try {
-    const { product_id, ...saleData } = req.body;
-    const nova = await prisma.sales.create({ data: saleData });
+    const nova = await prisma.sales.create({ data: parse.data });
     // Atualizar estoque do produto
-    if (product_id) {
-      const produto = await prisma.products.findUnique({ where: { id: product_id } });
+    if (parse.data.product_id) {
+      const produto = await prisma.products.findUnique({ where: { id: parse.data.product_id } });
       if (produto) {
-        const novoEstoque = produto.stock - Number(saleData.quantity);
+        const novoEstoque = produto.stock - Number(parse.data.quantity);
         await prisma.products.update({
-          where: { id: product_id },
+          where: { id: parse.data.product_id },
           data: {
             stock: novoEstoque,
             is_active: novoEstoque > 0
@@ -47,10 +51,14 @@ router.post('/', async (req, res) => {
 
 // Atualizar venda
 router.put('/:id', async (req, res) => {
+  const parse = salesUpdateInputSchema.safeParse(req.body);
+  if (!parse.success) {
+    return res.status(400).json({ error: 'Dados inválidos', details: parse.error.issues });
+  }
   try {
     const atualizada = await prisma.sales.update({
       where: { id: req.params.id },
-      data: req.body,
+      data: parse.data,
     });
     res.json(atualizada);
   } catch (e) {

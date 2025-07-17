@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
+import { ordersCreateInputSchema, ordersUpdateInputSchema } from '../zod';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -22,8 +23,12 @@ router.get('/:id', async (req, res) => {
 
 // Criar pedido
 router.post('/', async (req, res) => {
+  const parse = ordersCreateInputSchema.safeParse(req.body);
+  if (!parse.success) {
+    return res.status(400).json({ error: 'Dados inválidos', details: parse.error.issues });
+  }
   try {
-    const novo = await prisma.orders.create({ data: req.body });
+    const novo = await prisma.orders.create({ data: parse.data });
     res.status(201).json(novo);
   } catch (e) {
     res.status(400).json({ error: 'Erro ao criar pedido', details: e });
@@ -32,10 +37,14 @@ router.post('/', async (req, res) => {
 
 // Atualizar pedido
 router.put('/:id', async (req, res) => {
+  const parse = ordersUpdateInputSchema.safeParse(req.body);
+  if (!parse.success) {
+    return res.status(400).json({ error: 'Dados inválidos', details: parse.error.issues });
+  }
   try {
     const atualizado = await prisma.orders.update({
       where: { id: req.params.id },
-      data: req.body,
+      data: parse.data,
     });
     res.json(atualizado);
   } catch (e) {

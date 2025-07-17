@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
-import { expensesCreateInputObjectSchema } from '../../src/zod/schemas/objects/expensesCreateInput.schema';
-import { expensesUpdateInputObjectSchema } from '../../src/zod/schemas/objects/expensesUpdateInput.schema';
+import { expensesCreateInputSchema, expensesUpdateInputSchema } from '../zod';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -22,7 +21,7 @@ router.get('/:id', async (req, res) => {
 // Criar despesa
 router.post('/', async (req, res) => {
   // Validação Zod
-  const parse = expensesCreateInputObjectSchema.safeParse(req.body);
+  const parse = expensesCreateInputSchema.safeParse(req.body);
   if (!parse.success) {
     return res.status(400).json({ error: 'Dados inválidos', details: parse.error.issues });
   }
@@ -37,7 +36,7 @@ router.post('/', async (req, res) => {
 // Atualizar despesa
 router.put('/:id', async (req, res) => {
   // Validação Zod para atualização
-  const parse = expensesUpdateInputObjectSchema.safeParse(req.body);
+  const parse = expensesUpdateInputSchema.safeParse(req.body);
   if (!parse.success) {
     return res.status(400).json({ error: 'Dados inválidos', details: parse.error.issues });
   }

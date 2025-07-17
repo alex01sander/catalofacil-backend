@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
+import { credit_accountsCreateInputSchema, credit_accountsUpdateInputSchema } from '../zod';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -22,6 +23,10 @@ router.get('/:id', async (req, res) => {
 
 // Criar conta de crédito
 router.post('/', async (req, res) => {
+  const parse = credit_accountsCreateInputSchema.safeParse(req.body);
+  if (!parse.success) {
+    return res.status(400).json({ error: 'Dados inválidos', details: parse.error.issues });
+  }
   try {
     // Verifica se o usuário está autenticado
     const user = (req as any).user;
@@ -55,10 +60,14 @@ router.post('/', async (req, res) => {
 
 // Atualizar conta de crédito
 router.put('/:id', async (req, res) => {
+  const parse = credit_accountsUpdateInputSchema.safeParse(req.body);
+  if (!parse.success) {
+    return res.status(400).json({ error: 'Dados inválidos', details: parse.error.issues });
+  }
   try {
     const atualizada = await prisma.credit_accounts.update({
       where: { id: req.params.id },
-      data: req.body,
+      data: parse.data,
     });
     res.json(atualizada);
   } catch (e) {
