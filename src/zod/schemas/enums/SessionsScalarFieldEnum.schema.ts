@@ -1,0 +1,15 @@
+import { z } from 'zod';
+
+export const SessionsScalarFieldEnumSchema = z.enum([
+  'id',
+  'user_id',
+  'created_at',
+  'updated_at',
+  'factor_id',
+  'aal',
+  'not_after',
+  'refreshed_at',
+  'user_agent',
+  'ip',
+  'tag',
+]);

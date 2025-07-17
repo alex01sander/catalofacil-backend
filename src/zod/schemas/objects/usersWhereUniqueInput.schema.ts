@@ -1,0 +1,12 @@
+import { z } from 'zod';
+
+import type { Prisma } from '@prisma/client';
+
+const Schema: z.ZodType<Prisma.usersWhereUniqueInput> = z
+  .object({
+    id: z.string().optional(),
+    phone: z.string().optional(),
+  })
+  .strict();
+
+export const usersWhereUniqueInputObjectSchema = Schema;

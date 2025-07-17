@@ -1,0 +1,16 @@
+import { z } from 'zod';
+
+export const Flow_stateScalarFieldEnumSchema = z.enum([
+  'id',
+  'user_id',
+  'auth_code',
+  'code_challenge_method',
+  'code_challenge',
+  'provider_type',
+  'provider_access_token',
+  'provider_refresh_token',
+  'created_at',
+  'updated_at',
+  'authentication_method',
+  'auth_code_issued_at',
+]);

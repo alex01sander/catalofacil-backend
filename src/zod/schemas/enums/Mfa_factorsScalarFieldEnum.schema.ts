@@ -1,0 +1,16 @@
+import { z } from 'zod';
+
+export const Mfa_factorsScalarFieldEnumSchema = z.enum([
+  'id',
+  'user_id',
+  'friendly_name',
+  'factor_type',
+  'status',
+  'created_at',
+  'updated_at',
+  'secret',
+  'phone',
+  'last_challenged_at',
+  'web_authn_credential',
+  'web_authn_aaguid',
+]);
