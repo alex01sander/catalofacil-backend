@@ -5,6 +5,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { PrismaClient } from '@prisma/client';
+import productsRouter from './routes/products';
 
 const app = express();
 const prisma = new PrismaClient();
@@ -81,6 +82,8 @@ app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
 app.use('*', (req: Request, res: Response) => {
   res.status(404).json({ error: 'Rota não encontrada' });
 });
+
+app.use('/products', productsRouter);
 
 const PORT = process.env.PORT || 3000;
 
