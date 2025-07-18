@@ -10,6 +10,7 @@ const helmet_1 = __importDefault(require("helmet"));
 const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
 const client_1 = require("@prisma/client");
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
+// Importar rotas
 const orders_1 = __importDefault(require("./routes/orders"));
 const orderItems_1 = __importDefault(require("./routes/orderItems"));
 const customers_1 = __importDefault(require("./routes/customers"));
@@ -25,7 +26,6 @@ const storeSettings_1 = __importDefault(require("./routes/storeSettings"));
 const creditAccounts_1 = __importDefault(require("./routes/creditAccounts"));
 const creditTransactions_1 = __importDefault(require("./routes/creditTransactions"));
 const domain_1 = __importDefault(require("./routes/domain"));
-// import adminRouter from './routes/admin';
 const app = (0, express_1.default)();
 const prisma = new client_1.PrismaClient();
 // Configurações de segurança
@@ -53,6 +53,7 @@ app.use((req, res, next) => {
     console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
     next();
 });
+// Rotas
 app.use('/pedidos', orders_1.default);
 app.use('/itens-pedido', orderItems_1.default);
 app.use('/clientes', customers_1.default);
@@ -65,10 +66,9 @@ app.use('/fluxo-caixa', cashFlow_1.default);
 app.use('/auth', auth_1.default);
 app.use('/site', site_1.default);
 app.use('/storeSettings', storeSettings_1.default);
-app.use('/credit-accounts', authMiddleware, creditAccounts_1.default);
-app.use('/credit-transactions', authMiddleware, creditTransactions_1.default);
+app.use('/credit-accounts', creditAccounts_1.default);
+app.use('/credit-transactions', creditTransactions_1.default);
 app.use('/domain', domain_1.default);
-// app.use('/admin', authMiddleware, adminRouter);
 // Rota de teste
 app.get('/', (req, res) => {
     res.json({

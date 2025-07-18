@@ -8,6 +8,7 @@ import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 
+// Importar rotas
 import ordersRouter from './routes/orders';
 import orderItemsRouter from './routes/orderItems';
 import customersRouter from './routes/customers';
@@ -23,8 +24,6 @@ import storeSettingsRouter from './routes/storeSettings';
 import creditAccountsRouter from './routes/creditAccounts';
 import creditTransactionsRouter from './routes/creditTransactions';
 import domainRouter from './routes/domain';
-
-// import adminRouter from './routes/admin';
 
 const app = express();
 const prisma = new PrismaClient();
@@ -59,6 +58,7 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   next();
 });
 
+// Rotas
 app.use('/pedidos', ordersRouter);
 app.use('/itens-pedido', orderItemsRouter);
 app.use('/clientes', customersRouter);
@@ -71,10 +71,9 @@ app.use('/fluxo-caixa', cashFlowRouter);
 app.use('/auth', authRouter);
 app.use('/site', siteRouter);
 app.use('/storeSettings', storeSettingsRouter);
-app.use('/credit-accounts', authMiddleware, creditAccountsRouter);
-app.use('/credit-transactions', authMiddleware, creditTransactionsRouter);
+app.use('/credit-accounts', creditAccountsRouter);
+app.use('/credit-transactions', creditTransactionsRouter);
 app.use('/domain', domainRouter);
-// app.use('/admin', authMiddleware, adminRouter);
 
 // Rota de teste
 app.get('/', (req: Request, res: Response) => {
