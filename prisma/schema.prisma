@@ -667,12 +667,12 @@ enum one_time_token_type {
   @@schema("auth")
 }
 
-generator zod {
-  provider                 = "zod-prisma-types"
-  output                   = "../src/zod"
-  inputTypes               = true
-  useInputTypesForJson     = true
-}
+// generator zod {
+//   provider                 = "zod-prisma-types"
+//   output                   = "../src/zod"
+//   inputTypes               = true
+//   useInputTypesForJson     = true
+// }
 
 model User {
   id        String   @id @default(uuid())
