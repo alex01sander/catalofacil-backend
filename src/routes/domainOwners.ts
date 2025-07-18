@@ -1,11 +1,12 @@
 import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
+import authenticateJWT from '../middleware/auth';
 
 const router = Router();
 const prisma = new PrismaClient();
 
 // Listar todos os domínios
-router.get('/', async (req, res) => {
+router.get('/', authenticateJWT, async (req, res) => {
   const dominios = await prisma.domain_owners.findMany({ include: { users: true } });
   res.json(dominios);
 });

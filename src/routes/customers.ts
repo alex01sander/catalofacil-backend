@@ -1,12 +1,13 @@
 import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { customersCreateInputSchema, customersUpdateInputSchema } from '../zod';
+import authenticateJWT from '../middleware/auth';
 
 const router = Router();
 const prisma = new PrismaClient();
 
 // Listar todos os clientes
-router.get('/', async (req, res) => {
+router.get('/', authenticateJWT, async (req, res) => {
   const clientes = await prisma.customers.findMany({ include: { stores: true, orders: true } });
   res.json(clientes);
 });

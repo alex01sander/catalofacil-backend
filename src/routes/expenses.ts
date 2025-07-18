@@ -1,12 +1,13 @@
 import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { expensesCreateInputSchema, expensesUpdateInputSchema } from '../zod';
+import authenticateJWT from '../middleware/auth';
 
 const router = Router();
 const prisma = new PrismaClient();
 
 // Listar todas as despesas
-router.get('/', async (req, res) => {
+router.get('/', authenticateJWT, async (req, res) => {
   const despesas = await prisma.expenses.findMany();
   res.json(despesas);
 });

@@ -26,7 +26,7 @@ router.post('/', authenticateJWT, async (req, res) => {
 });
 
 // Listar produtos
-router.get('/', async (req, res) => {
+router.get('/', authenticateJWT, async (req, res) => {
   try {
     const products = await prisma.products.findMany({
       where: { is_active: true }

@@ -1,12 +1,13 @@
 import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { credit_transactionsCreateInputSchema, credit_transactionsUpdateInputSchema } from '../zod';
+import authenticateJWT from '../middleware/auth';
 
 const router = Router();
 const prisma = new PrismaClient();
 
 // Listar todas as transações de crédito
-router.get('/', async (req, res) => {
+router.get('/', authenticateJWT, async (req, res) => {
   try {
     const transacoes = await prisma.credit_transactions.findMany({ 
       include: { credit_accounts: true } 

@@ -1,12 +1,13 @@
 import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { categoriesCreateInputSchema, categoriesUpdateInputSchema } from '../zod';
+import authenticateJWT from '../middleware/auth';
 
 const router = Router();
 const prisma = new PrismaClient();
 
 // Listar todas as categorias
-router.get('/', async (req, res) => {
+router.get('/', authenticateJWT, async (req, res) => {
   const categorias = await prisma.categories.findMany({ include: { products: true, stores: true, users: true } });
   res.json(categorias);
 });

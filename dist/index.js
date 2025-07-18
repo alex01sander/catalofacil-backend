@@ -9,23 +9,6 @@ const cors_1 = __importDefault(require("cors"));
 const helmet_1 = __importDefault(require("helmet"));
 const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
 const client_1 = require("@prisma/client");
-const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
-// Importar rotas
-const orders_1 = __importDefault(require("./routes/orders"));
-const orderItems_1 = __importDefault(require("./routes/orderItems"));
-const customers_1 = __importDefault(require("./routes/customers"));
-const stores_1 = __importDefault(require("./routes/stores"));
-const products_1 = __importDefault(require("./routes/products"));
-const categories_1 = __importDefault(require("./routes/categories"));
-const sales_1 = __importDefault(require("./routes/sales"));
-const expenses_1 = __importDefault(require("./routes/expenses"));
-const cashFlow_1 = __importDefault(require("./routes/cashFlow"));
-const auth_1 = __importDefault(require("./routes/auth"));
-const site_1 = __importDefault(require("./routes/site"));
-const storeSettings_1 = __importDefault(require("./routes/storeSettings"));
-const creditAccounts_1 = __importDefault(require("./routes/creditAccounts"));
-const creditTransactions_1 = __importDefault(require("./routes/creditTransactions"));
-const domain_1 = __importDefault(require("./routes/domain"));
 const app = (0, express_1.default)();
 const prisma = new client_1.PrismaClient();
 // Configurações de segurança
@@ -53,22 +36,6 @@ app.use((req, res, next) => {
     console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
     next();
 });
-// Rotas
-app.use('/pedidos', orders_1.default);
-app.use('/itens-pedido', orderItems_1.default);
-app.use('/clientes', customers_1.default);
-app.use('/lojas', stores_1.default);
-app.use('/produtos', products_1.default);
-app.use('/categorias', categories_1.default);
-app.use('/vendas', sales_1.default);
-app.use('/despesas', expenses_1.default);
-app.use('/fluxo-caixa', cashFlow_1.default);
-app.use('/auth', auth_1.default);
-app.use('/site', site_1.default);
-app.use('/storeSettings', storeSettings_1.default);
-app.use('/credit-accounts', creditAccounts_1.default);
-app.use('/credit-transactions', creditTransactions_1.default);
-app.use('/domain', domain_1.default);
 // Rota de teste
 app.get('/', (req, res) => {
     res.json({
@@ -99,23 +66,6 @@ app.use((err, req, res, next) => {
 app.use('*', (req, res) => {
     res.status(404).json({ error: 'Rota não encontrada' });
 });
-function authMiddleware(req, res, next) {
-    const auth = req.headers.authorization;
-    if (!auth)
-        return res.status(401).json({ error: 'Token não fornecido' });
-    const [, token] = auth.split(' ');
-    if (!token)
-        return res.status(401).json({ error: 'Token inválido' });
-    try {
-        const decoded = jsonwebtoken_1.default.verify(token, process.env.JWT_SECRET);
-        req.user = decoded;
-        next();
-    }
-    catch (error) {
-        console.error('Erro de autenticação:', error);
-        res.status(401).json({ error: 'Token inválido' });
-    }
-}
 const PORT = process.env.PORT || 3000;
 // Graceful shutdown
 process.on('SIGTERM', async () => {

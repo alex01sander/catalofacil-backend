@@ -1,11 +1,12 @@
 import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
+import authenticateJWT from '../middleware/auth';
 
 const router = Router();
 const prisma = new PrismaClient();
 
 // Listar todas as lojas
-router.get('/', async (req, res) => {
+router.get('/', authenticateJWT, async (req, res) => {
   const lojas = await prisma.stores.findMany({ include: { categories: true, customers: true, orders: true, products: true, sales: true } });
   res.json(lojas);
 });

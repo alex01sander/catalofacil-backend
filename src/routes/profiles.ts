@@ -1,11 +1,12 @@
 import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
+import authenticateJWT from '../middleware/auth';
 
 const router = Router();
 const prisma = new PrismaClient();
 
 // Listar todos os perfis
-router.get('/', async (req, res) => {
+router.get('/', authenticateJWT, async (req, res) => {
   const perfis = await prisma.profiles.findMany({ include: { users: true } });
   res.json(perfis);
 });
