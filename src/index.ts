@@ -31,6 +31,8 @@ import expensesRouter from './routes/expenses';
 import domainOwnersRouter from './routes/domainOwners';
 import identitiesRouter from './routes/identities';
 
+import type { CorsOptionsDelegate, CorsRequest } from 'cors';
+
 const app = express();
 const prisma = new PrismaClient();
 
@@ -53,13 +55,28 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
-// CORS mais restritivo para produção
-const corsOptions = {
-  origin: process.env.NODE_ENV === 'production'
-    ? [process.env.FRONTEND_URL || 'https://catalofacil-frontend.vercel.app']
-    : true,
-  credentials: true,
-  optionsSuccessStatus: 200
+// CORS dinâmico para multi-tenant (subdomínios e domínios personalizados)
+const corsOptions: CorsOptionsDelegate<CorsRequest> = async (req, callback) => {
+  const origin = req.headers['origin'] as string | undefined;
+  // Permite requisições sem origin (ex: ferramentas internas, curl, etc)
+  if (!origin) return callback(null, { origin: true, credentials: true, optionsSuccessStatus: 200 });
+
+  // Permite todos os subdomínios de catalofacil.com.br
+  if (origin.endsWith('.catalofacil.com.br')) return callback(null, { origin: true, credentials: true, optionsSuccessStatus: 200 });
+
+  // Permite o domínio principal
+  if (origin === 'https://catalofacil.com.br') return callback(null, { origin: true, credentials: true, optionsSuccessStatus: 200 });
+
+  try {
+    // Verifica se o domínio está cadastrado como slug na tabela Domain
+    const slug = origin.replace('https://', '').replace('.catalofacil.com.br', '');
+    const domain = await prisma.domain.findFirst({ where: { slug } });
+    if (domain) return callback(null, { origin: true, credentials: true, optionsSuccessStatus: 200 });
+  } catch (e) {
+    console.error('Erro ao consultar domínio para CORS:', e);
+  }
+  // Bloqueia qualquer outro domínio
+  return callback(new Error('Not allowed by CORS'), { origin: false });
 };
 app.use(cors(corsOptions));
 
