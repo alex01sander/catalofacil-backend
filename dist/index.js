@@ -10,6 +10,30 @@ const helmet_1 = __importDefault(require("helmet"));
 const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
 const client_1 = require("@prisma/client");
 const products_1 = __importDefault(require("./routes/products"));
+const auth_1 = __importDefault(require("./routes/auth"));
+const site_1 = __importDefault(require("./routes/site"));
+const domain_1 = __importDefault(require("./routes/domain"));
+const stores_1 = __importDefault(require("./routes/stores"));
+const ssoProviders_1 = __importDefault(require("./routes/ssoProviders"));
+const samlProviders_1 = __importDefault(require("./routes/samlProviders"));
+const ssoDomains_1 = __importDefault(require("./routes/ssoDomains"));
+const flowState_1 = __importDefault(require("./routes/flowState"));
+const users_1 = __importDefault(require("./routes/users"));
+const categories_1 = __importDefault(require("./routes/categories"));
+const instances_1 = __importDefault(require("./routes/instances"));
+const profiles_1 = __importDefault(require("./routes/profiles"));
+const mfaChallenges_1 = __importDefault(require("./routes/mfaChallenges"));
+const customers_1 = __importDefault(require("./routes/customers"));
+const samlRelayStates_1 = __importDefault(require("./routes/samlRelayStates"));
+const codeChallengeMethod_1 = __importDefault(require("./routes/codeChallengeMethod"));
+const controllerAdmins_1 = __importDefault(require("./routes/controllerAdmins"));
+const sessions_1 = __importDefault(require("./routes/sessions"));
+const storeSettings_1 = __importDefault(require("./routes/storeSettings"));
+const mfaAmrClaims_1 = __importDefault(require("./routes/mfaAmrClaims"));
+const mfaFactors_1 = __importDefault(require("./routes/mfaFactors"));
+const expenses_1 = __importDefault(require("./routes/expenses"));
+const domainOwners_1 = __importDefault(require("./routes/domainOwners"));
+const identities_1 = __importDefault(require("./routes/identities"));
 const app = (0, express_1.default)();
 const prisma = new client_1.PrismaClient();
 // Verificação de variáveis de ambiente obrigatórias
@@ -28,13 +52,30 @@ const limiter = (0, express_rate_limit_1.default)({
     message: 'Muitas requisições deste IP, tente novamente mais tarde.'
 });
 app.use(limiter);
-// CORS mais restritivo para produção
-const corsOptions = {
-    origin: process.env.NODE_ENV === 'production'
-        ? [process.env.FRONTEND_URL || 'https://catalofacil-frontend.vercel.app']
-        : true,
-    credentials: true,
-    optionsSuccessStatus: 200
+// CORS dinâmico para multi-tenant (subdomínios e domínios personalizados)
+const corsOptions = async (req, callback) => {
+    const origin = req.headers['origin'];
+    // Permite requisições sem origin (ex: ferramentas internas, curl, etc)
+    if (!origin)
+        return callback(null, { origin: true, credentials: true, optionsSuccessStatus: 200 });
+    // Permite todos os subdomínios de catalofacil.com.br
+    if (origin.endsWith('.catalofacil.com.br'))
+        return callback(null, { origin: true, credentials: true, optionsSuccessStatus: 200 });
+    // Permite o domínio principal
+    if (origin === 'https://catalofacil.com.br')
+        return callback(null, { origin: true, credentials: true, optionsSuccessStatus: 200 });
+    try {
+        // Verifica se o domínio está cadastrado como slug na tabela Domain
+        const slug = origin.replace('https://', '').replace('.catalofacil.com.br', '');
+        const domain = await prisma.domain.findFirst({ where: { slug } });
+        if (domain)
+            return callback(null, { origin: true, credentials: true, optionsSuccessStatus: 200 });
+    }
+    catch (e) {
+        console.error('Erro ao consultar domínio para CORS:', e);
+    }
+    // Bloqueia qualquer outro domínio
+    return callback(new Error('Not allowed by CORS'), { origin: false });
 };
 app.use((0, cors_1.default)(corsOptions));
 app.use(express_1.default.json({ limit: '10mb' }));
@@ -71,7 +112,31 @@ app.use((err, req, res, next) => {
         res.status(500).json({ error: err.message, stack: err.stack });
     }
 });
+app.use('/auth', auth_1.default);
 app.use('/products', products_1.default);
+app.use('/site', site_1.default);
+app.use('/domain', domain_1.default);
+app.use('/stores', stores_1.default);
+app.use('/ssoProviders', ssoProviders_1.default);
+app.use('/samlProviders', samlProviders_1.default);
+app.use('/ssoDomains', ssoDomains_1.default);
+app.use('/flowState', flowState_1.default);
+app.use('/users', users_1.default);
+app.use('/categories', categories_1.default);
+app.use('/instances', instances_1.default);
+app.use('/profiles', profiles_1.default);
+app.use('/mfaChallenges', mfaChallenges_1.default);
+app.use('/customers', customers_1.default);
+app.use('/samlRelayStates', samlRelayStates_1.default);
+app.use('/codeChallengeMethod', codeChallengeMethod_1.default);
+app.use('/controllerAdmins', controllerAdmins_1.default);
+app.use('/sessions', sessions_1.default);
+app.use('/storeSettings', storeSettings_1.default);
+app.use('/mfaAmrClaims', mfaAmrClaims_1.default);
+app.use('/mfaFactors', mfaFactors_1.default);
+app.use('/expenses', expenses_1.default);
+app.use('/domainOwners', domainOwners_1.default);
+app.use('/identities', identities_1.default);
 // Middleware para rotas não encontradas
 app.use('*', (req, res) => {
     res.status(404).json({ error: 'Rota não encontrada' });
