@@ -64,6 +64,9 @@ const corsOptions = async (req, callback) => {
     // Permite o domínio principal
     if (origin === 'https://catalofacil.com.br')
         return callback(null, { origin: true, credentials: true, optionsSuccessStatus: 200 });
+    // Permite o frontend do Vercel
+    if (origin === 'https://catalofacil-frontend.vercel.app')
+        return callback(null, { origin: true, credentials: true, optionsSuccessStatus: 200 });
     try {
         // Verifica se o domínio está cadastrado como slug na tabela Domain
         const slug = origin.replace('https://', '').replace('.catalofacil.com.br', '');
