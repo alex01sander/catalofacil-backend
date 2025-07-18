@@ -78,12 +78,12 @@ app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
   }
 });
 
+app.use('/products', productsRouter);
+
 // Middleware para rotas não encontradas
 app.use('*', (req: Request, res: Response) => {
   res.status(404).json({ error: 'Rota não encontrada' });
 });
-
-app.use('/products', productsRouter);
 
 const PORT = process.env.PORT || 3000;
 
