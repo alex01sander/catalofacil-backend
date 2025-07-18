@@ -18,8 +18,12 @@ router.post('/', authenticateJWT, async (req, res) => {
   }
   
   try {
+    const { user_id, ...rest } = parse.data;
     const product = await prisma.products.create({
-      data: parse.data
+      data: {
+        ...rest,
+        users: { connect: { id: user_id } }
+      }
     });
     res.status(201).json(product);
   } catch (error) {

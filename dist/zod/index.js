@@ -8,28 +8,11 @@ const zod_1 = require("zod");
 // Products
 exports.productsCreateInputSchema = zod_1.z.object({
     name: zod_1.z.string(),
-    description: zod_1.z.string().optional(),
     price: zod_1.z.number(),
-    stock: zod_1.z.number().optional(),
-    is_active: zod_1.z.boolean().optional(),
-    image: zod_1.z.string().optional(),
-    images: zod_1.z.array(zod_1.z.string()).optional(),
-    user_id: zod_1.z.string(),
-    category_id: zod_1.z.string().optional(),
-    store_id: zod_1.z.string().optional(),
+    user_id: zod_1.z.string(), // campo obrigatório para alinhar com o modelo Prisma
+    // Adicione outros campos obrigatórios conforme necessário
 });
-exports.productsUpdateInputSchema = zod_1.z.object({
-    name: zod_1.z.string().optional(),
-    description: zod_1.z.string().optional(),
-    price: zod_1.z.number().optional(),
-    stock: zod_1.z.number().optional(),
-    is_active: zod_1.z.boolean().optional(),
-    image: zod_1.z.string().optional(),
-    images: zod_1.z.array(zod_1.z.string()).optional(),
-    user_id: zod_1.z.string().optional(),
-    category_id: zod_1.z.string().optional(),
-    store_id: zod_1.z.string().optional(),
-});
+exports.productsUpdateInputSchema = exports.productsCreateInputSchema.partial();
 // Sales
 exports.salesCreateInputSchema = zod_1.z.object({
     user_id: zod_1.z.string(),

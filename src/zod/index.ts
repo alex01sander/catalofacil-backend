@@ -7,29 +7,12 @@ import { z } from 'zod';
 // Products
 export const productsCreateInputSchema = z.object({
   name: z.string(),
-  description: z.string().optional(),
   price: z.number(),
-  stock: z.number().optional(),
-  is_active: z.boolean().optional(),
-  image: z.string().optional(),
-  images: z.array(z.string()).optional(),
-  user_id: z.string(),
-  category_id: z.string().optional(),
-  store_id: z.string().optional(),
+  user_id: z.string(), // campo obrigatório para alinhar com o modelo Prisma
+  // Adicione outros campos obrigatórios conforme necessário
 });
 
-export const productsUpdateInputSchema = z.object({
-  name: z.string().optional(),
-  description: z.string().optional(),
-  price: z.number().optional(),
-  stock: z.number().optional(),
-  is_active: z.boolean().optional(),
-  image: z.string().optional(),
-  images: z.array(z.string()).optional(),
-  user_id: z.string().optional(),
-  category_id: z.string().optional(),
-  store_id: z.string().optional(),
-});
+export const productsUpdateInputSchema = productsCreateInputSchema.partial();
 
 // Sales
 export const salesCreateInputSchema = z.object({

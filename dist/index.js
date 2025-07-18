@@ -9,6 +9,7 @@ const cors_1 = __importDefault(require("cors"));
 const helmet_1 = __importDefault(require("helmet"));
 const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
 const client_1 = require("@prisma/client");
+const products_1 = __importDefault(require("./routes/products"));
 const app = (0, express_1.default)();
 const prisma = new client_1.PrismaClient();
 // Verificação de variáveis de ambiente obrigatórias
@@ -30,7 +31,7 @@ app.use(limiter);
 // CORS mais restritivo para produção
 const corsOptions = {
     origin: process.env.NODE_ENV === 'production'
-        ? [process.env.FRONTEND_URL || 'https://seu-frontend.railway.app']
+        ? [process.env.FRONTEND_URL || 'https://catalofacil-frontend.vercel.app']
         : true,
     credentials: true,
     optionsSuccessStatus: 200
@@ -70,6 +71,7 @@ app.use((err, req, res, next) => {
         res.status(500).json({ error: err.message, stack: err.stack });
     }
 });
+app.use('/products', products_1.default);
 // Middleware para rotas não encontradas
 app.use('*', (req, res) => {
     res.status(404).json({ error: 'Rota não encontrada' });
