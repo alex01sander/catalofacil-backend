@@ -30,8 +30,8 @@ app.use(limiter);
 
 // CORS mais restritivo para produção
 const corsOptions = {
-  origin: process.env.NODE_ENV === 'production' 
-    ? [process.env.FRONTEND_URL || 'https://seu-frontend.railway.app'] 
+  origin: process.env.NODE_ENV === 'production'
+    ? [process.env.FRONTEND_URL || 'https://catalofacil-frontend.vercel.app']
     : true,
   credentials: true,
   optionsSuccessStatus: 200
