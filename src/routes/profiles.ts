@@ -1,9 +1,12 @@
 import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
 import authenticateJWT from '../middleware/auth';
+import { z } from 'zod';
 
 const router = Router();
 const prisma = new PrismaClient();
+
+const idParamSchema = z.object({ id: z.string().min(1, 'ID obrigatório') });
 
 // Listar todos os perfis
 router.get('/', authenticateJWT, async (req, res) => {
@@ -12,7 +15,11 @@ router.get('/', authenticateJWT, async (req, res) => {
 });
 
 // Buscar perfil por ID
-router.get('/:id', async (req, res) => {
+router.get('/:id', authenticateJWT, async (req, res) => {
+  const parse = idParamSchema.safeParse(req.params);
+  if (!parse.success) {
+    return res.status(400).json({ error: 'Parâmetro inválido', details: parse.error.issues });
+  }
   const perfil = await prisma.profiles.findUnique({
     where: { id: req.params.id },
     include: { users: true }
@@ -32,7 +39,11 @@ router.post('/', async (req, res) => {
 });
 
 // Atualizar perfil
-router.put('/:id', async (req, res) => {
+router.put('/:id', authenticateJWT, async (req, res) => {
+  const parse = idParamSchema.safeParse(req.params);
+  if (!parse.success) {
+    return res.status(400).json({ error: 'Parâmetro inválido', details: parse.error.issues });
+  }
   try {
     const atualizado = await prisma.profiles.update({
       where: { id: req.params.id },
@@ -45,7 +56,11 @@ router.put('/:id', async (req, res) => {
 });
 
 // Deletar perfil
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', authenticateJWT, async (req, res) => {
+  const parse = idParamSchema.safeParse(req.params);
+  if (!parse.success) {
+    return res.status(400).json({ error: 'Parâmetro inválido', details: parse.error.issues });
+  }
   try {
     await prisma.profiles.delete({ where: { id: req.params.id } });
     res.status(204).send();

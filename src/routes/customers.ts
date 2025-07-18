@@ -2,9 +2,12 @@ import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { customersCreateInputSchema, customersUpdateInputSchema } from '../zod';
 import authenticateJWT from '../middleware/auth';
+import { z } from 'zod';
 
 const router = Router();
 const prisma = new PrismaClient();
+
+const idParamSchema = z.object({ id: z.string().min(1, 'ID obrigatório') });
 
 // Listar todos os clientes
 router.get('/', authenticateJWT, async (req, res) => {
@@ -13,7 +16,11 @@ router.get('/', authenticateJWT, async (req, res) => {
 });
 
 // Buscar cliente por ID
-router.get('/:id', async (req, res) => {
+router.get('/:id', authenticateJWT, async (req, res) => {
+  const parse = idParamSchema.safeParse(req.params);
+  if (!parse.success) {
+    return res.status(400).json({ error: 'Parâmetro inválido', details: parse.error.issues });
+  }
   const cliente = await prisma.customers.findUnique({
     where: { id: req.params.id },
     include: { stores: true, orders: true }
@@ -37,7 +44,11 @@ router.post('/', async (req, res) => {
 });
 
 // Atualizar cliente
-router.put('/:id', async (req, res) => {
+router.put('/:id', authenticateJWT, async (req, res) => {
+  const parse = idParamSchema.safeParse(req.params);
+  if (!parse.success) {
+    return res.status(400).json({ error: 'Parâmetro inválido', details: parse.error.issues });
+  }
   const parse = customersUpdateInputSchema.safeParse(req.body);
   if (!parse.success) {
     return res.status(400).json({ error: 'Dados inválidos', details: parse.error.issues });
@@ -54,7 +65,11 @@ router.put('/:id', async (req, res) => {
 });
 
 // Deletar cliente
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', authenticateJWT, async (req, res) => {
+  const parse = idParamSchema.safeParse(req.params);
+  if (!parse.success) {
+    return res.status(400).json({ error: 'Parâmetro inválido', details: parse.error.issues });
+  }
   try {
     await prisma.customers.delete({ where: { id: req.params.id } });
     res.status(204).send();

@@ -2,9 +2,12 @@ import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { categoriesCreateInputSchema, categoriesUpdateInputSchema } from '../zod';
 import authenticateJWT from '../middleware/auth';
+import { z } from 'zod';
 
 const router = Router();
 const prisma = new PrismaClient();
+
+const idParamSchema = z.object({ id: z.string().min(1, 'ID obrigatório') });
 
 // Listar todas as categorias
 router.get('/', authenticateJWT, async (req, res) => {
@@ -13,7 +16,11 @@ router.get('/', authenticateJWT, async (req, res) => {
 });
 
 // Buscar categoria por ID
-router.get('/:id', async (req, res) => {
+router.get('/:id', authenticateJWT, async (req, res) => {
+  const parse = idParamSchema.safeParse(req.params);
+  if (!parse.success) {
+    return res.status(400).json({ error: 'Parâmetro inválido', details: parse.error.issues });
+  }
   const categoria = await prisma.categories.findUnique({
     where: { id: req.params.id },
     include: { products: true, stores: true, users: true }
@@ -37,7 +44,11 @@ router.post('/', async (req, res) => {
 });
 
 // Atualizar categoria
-router.put('/:id', async (req, res) => {
+router.put('/:id', authenticateJWT, async (req, res) => {
+  const parse = idParamSchema.safeParse(req.params);
+  if (!parse.success) {
+    return res.status(400).json({ error: 'Parâmetro inválido', details: parse.error.issues });
+  }
   const parse = categoriesUpdateInputSchema.safeParse(req.body);
   if (!parse.success) {
     return res.status(400).json({ error: 'Dados inválidos', details: parse.error.issues });
@@ -54,7 +65,11 @@ router.put('/:id', async (req, res) => {
 });
 
 // Deletar categoria
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', authenticateJWT, async (req, res) => {
+  const parse = idParamSchema.safeParse(req.params);
+  if (!parse.success) {
+    return res.status(400).json({ error: 'Parâmetro inválido', details: parse.error.issues });
+  }
   try {
     await prisma.categories.delete({ where: { id: req.params.id } });
     res.status(204).send();

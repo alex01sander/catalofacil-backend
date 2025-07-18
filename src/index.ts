@@ -9,6 +9,14 @@ import { PrismaClient } from '@prisma/client';
 const app = express();
 const prisma = new PrismaClient();
 
+// Verificação de variáveis de ambiente obrigatórias
+const requiredEnv = ['DATABASE_URL', 'JWT_SECRET'];
+const missingEnv = requiredEnv.filter((v) => !process.env[v]);
+if (missingEnv.length > 0) {
+  console.error('Erro: Variáveis de ambiente obrigatórias não definidas:', missingEnv.join(', '));
+  process.exit(1);
+}
+
 // Configurações de segurança
 app.use(helmet());
 
@@ -33,9 +41,10 @@ app.use(cors(corsOptions));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
-// Middleware de logging
+// Middleware de logging seguro
 app.use((req: Request, res: Response, next: NextFunction) => {
-  console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
+  // Nunca logar dados sensíveis como req.body ou req.headers!
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
   next();
 });
 

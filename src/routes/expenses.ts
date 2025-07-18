@@ -2,9 +2,12 @@ import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { expensesCreateInputSchema, expensesUpdateInputSchema } from '../zod';
 import authenticateJWT from '../middleware/auth';
+import { z } from 'zod';
 
 const router = Router();
 const prisma = new PrismaClient();
+
+const idParamSchema = z.object({ id: z.string().min(1, 'ID obrigatório') });
 
 // Listar todas as despesas
 router.get('/', authenticateJWT, async (req, res) => {
@@ -13,7 +16,11 @@ router.get('/', authenticateJWT, async (req, res) => {
 });
 
 // Buscar despesa por ID
-router.get('/:id', async (req, res) => {
+router.get('/:id', authenticateJWT, async (req, res) => {
+  const parse = idParamSchema.safeParse(req.params);
+  if (!parse.success) {
+    return res.status(400).json({ error: 'Parâmetro inválido', details: parse.error.issues });
+  }
   const despesa = await prisma.expenses.findUnique({ where: { id: req.params.id } });
   if (!despesa) return res.status(404).json({ error: 'Despesa não encontrada' });
   res.json(despesa);
@@ -35,16 +42,20 @@ router.post('/', async (req, res) => {
 });
 
 // Atualizar despesa
-router.put('/:id', async (req, res) => {
-  // Validação Zod para atualização
-  const parse = expensesUpdateInputSchema.safeParse(req.body);
+router.put('/:id', authenticateJWT, async (req, res) => {
+  const parse = idParamSchema.safeParse(req.params);
   if (!parse.success) {
-    return res.status(400).json({ error: 'Dados inválidos', details: parse.error.issues });
+    return res.status(400).json({ error: 'Parâmetro inválido', details: parse.error.issues });
+  }
+  // Validação Zod para atualização
+  const parseUpdate = expensesUpdateInputSchema.safeParse(req.body);
+  if (!parseUpdate.success) {
+    return res.status(400).json({ error: 'Dados inválidos', details: parseUpdate.error.issues });
   }
   try {
     const atualizada = await prisma.expenses.update({
       where: { id: req.params.id },
-      data: parse.data,
+      data: parseUpdate.data,
     });
     res.json(atualizada);
   } catch (e) {
@@ -53,7 +64,11 @@ router.put('/:id', async (req, res) => {
 });
 
 // Deletar despesa
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', authenticateJWT, async (req, res) => {
+  const parse = idParamSchema.safeParse(req.params);
+  if (!parse.success) {
+    return res.status(400).json({ error: 'Parâmetro inválido', details: parse.error.issues });
+  }
   try {
     await prisma.expenses.delete({ where: { id: req.params.id } });
     res.status(204).send();

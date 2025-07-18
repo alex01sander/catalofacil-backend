@@ -2,9 +2,12 @@ import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { salesCreateInputSchema, salesUpdateInputSchema } from '../zod';
 import authenticateJWT from '../middleware/auth';
+import { z } from 'zod';
 
 const router = Router();
 const prisma = new PrismaClient();
+
+const idParamSchema = z.object({ id: z.string().min(1, 'ID obrigatório') });
 
 // Listar todas as vendas
 router.get('/', authenticateJWT, async (req, res) => {
@@ -18,7 +21,11 @@ router.get('/', authenticateJWT, async (req, res) => {
 });
 
 // Buscar venda por ID
-router.get('/:id', async (req, res) => {
+router.get('/:id', authenticateJWT, async (req, res) => {
+  const parse = idParamSchema.safeParse(req.params);
+  if (!parse.success) {
+    return res.status(400).json({ error: 'Parâmetro inválido', details: parse.error.issues });
+  }
   try {
     const venda = await prisma.sales.findUnique({
       where: { id: req.params.id },
@@ -49,16 +56,20 @@ router.post('/', async (req, res) => {
 });
 
 // Atualizar venda
-router.put('/:id', async (req, res) => {
-  const parse = salesUpdateInputSchema.safeParse(req.body);
+router.put('/:id', authenticateJWT, async (req, res) => {
+  const parse = idParamSchema.safeParse(req.params);
   if (!parse.success) {
-    return res.status(400).json({ error: 'Dados inválidos', details: parse.error.issues });
+    return res.status(400).json({ error: 'Parâmetro inválido', details: parse.error.issues });
+  }
+  const parseBody = salesUpdateInputSchema.safeParse(req.body);
+  if (!parseBody.success) {
+    return res.status(400).json({ error: 'Dados inválidos', details: parseBody.error.issues });
   }
   
   try {
     const atualizada = await prisma.sales.update({
       where: { id: req.params.id },
-      data: parse.data,
+      data: parseBody.data,
     });
     res.json(atualizada);
   } catch (error) {
@@ -68,7 +79,11 @@ router.put('/:id', async (req, res) => {
 });
 
 // Deletar venda
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', authenticateJWT, async (req, res) => {
+  const parse = idParamSchema.safeParse(req.params);
+  if (!parse.success) {
+    return res.status(400).json({ error: 'Parâmetro inválido', details: parse.error.issues });
+  }
   try {
     await prisma.sales.delete({ where: { id: req.params.id } });
     res.status(204).send();
