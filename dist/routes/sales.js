@@ -1,12 +1,18 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const client_1 = require("@prisma/client");
 const zod_1 = require("../zod");
+const auth_1 = __importDefault(require("../middleware/auth"));
+const zod_2 = require("zod");
 const router = (0, express_1.Router)();
 const prisma = new client_1.PrismaClient();
+const idParamSchema = zod_2.z.object({ id: zod_2.z.string().min(1, 'ID obrigatório') });
 // Listar todas as vendas
-router.get('/', async (req, res) => {
+router.get('/', auth_1.default, async (req, res) => {
     try {
         const vendas = await prisma.sales.findMany({ include: { stores: true } });
         res.json(vendas);
@@ -17,7 +23,11 @@ router.get('/', async (req, res) => {
     }
 });
 // Buscar venda por ID
-router.get('/:id', async (req, res) => {
+router.get('/:id', auth_1.default, async (req, res) => {
+    const parse = idParamSchema.safeParse(req.params);
+    if (!parse.success) {
+        return res.status(400).json({ error: 'Parâmetro inválido', details: parse.error.issues });
+    }
     try {
         const venda = await prisma.sales.findUnique({
             where: { id: req.params.id },
@@ -48,15 +58,19 @@ router.post('/', async (req, res) => {
     }
 });
 // Atualizar venda
-router.put('/:id', async (req, res) => {
-    const parse = zod_1.salesUpdateInputSchema.safeParse(req.body);
+router.put('/:id', auth_1.default, async (req, res) => {
+    const parse = idParamSchema.safeParse(req.params);
     if (!parse.success) {
-        return res.status(400).json({ error: 'Dados inválidos', details: parse.error.issues });
+        return res.status(400).json({ error: 'Parâmetro inválido', details: parse.error.issues });
+    }
+    const parseBody = zod_1.salesUpdateInputSchema.safeParse(req.body);
+    if (!parseBody.success) {
+        return res.status(400).json({ error: 'Dados inválidos', details: parseBody.error.issues });
     }
     try {
         const atualizada = await prisma.sales.update({
             where: { id: req.params.id },
-            data: parse.data,
+            data: parseBody.data,
         });
         res.json(atualizada);
     }
@@ -66,7 +80,11 @@ router.put('/:id', async (req, res) => {
     }
 });
 // Deletar venda
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', auth_1.default, async (req, res) => {
+    const parse = idParamSchema.safeParse(req.params);
+    if (!parse.success) {
+        return res.status(400).json({ error: 'Parâmetro inválido', details: parse.error.issues });
+    }
     try {
         await prisma.sales.delete({ where: { id: req.params.id } });
         res.status(204).send();

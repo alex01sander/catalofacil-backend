@@ -45,18 +45,18 @@ router.post('/', async (req, res) => {
 
 // Atualizar categoria
 router.put('/:id', authenticateJWT, async (req, res) => {
-  const parse = idParamSchema.safeParse(req.params);
-  if (!parse.success) {
-    return res.status(400).json({ error: 'Parâmetro inválido', details: parse.error.issues });
+  const parseParams = idParamSchema.safeParse(req.params);
+  if (!parseParams.success) {
+    return res.status(400).json({ error: 'Parâmetro inválido', details: parseParams.error.issues });
   }
-  const parse = categoriesUpdateInputSchema.safeParse(req.body);
-  if (!parse.success) {
-    return res.status(400).json({ error: 'Dados inválidos', details: parse.error.issues });
+  const parseBody = categoriesUpdateInputSchema.safeParse(req.body);
+  if (!parseBody.success) {
+    return res.status(400).json({ error: 'Dados inválidos', details: parseBody.error.issues });
   }
   try {
     const atualizada = await prisma.categories.update({
       where: { id: req.params.id },
-      data: parse.data,
+      data: parseBody.data,
     });
     res.json(atualizada);
   } catch (e) {

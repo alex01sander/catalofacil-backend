@@ -11,6 +11,13 @@ const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
 const client_1 = require("@prisma/client");
 const app = (0, express_1.default)();
 const prisma = new client_1.PrismaClient();
+// Verificação de variáveis de ambiente obrigatórias
+const requiredEnv = ['DATABASE_URL', 'JWT_SECRET'];
+const missingEnv = requiredEnv.filter((v) => !process.env[v]);
+if (missingEnv.length > 0) {
+    console.error('Erro: Variáveis de ambiente obrigatórias não definidas:', missingEnv.join(', '));
+    process.exit(1);
+}
 // Configurações de segurança
 app.use((0, helmet_1.default)());
 // Rate limiting
@@ -31,9 +38,10 @@ const corsOptions = {
 app.use((0, cors_1.default)(corsOptions));
 app.use(express_1.default.json({ limit: '10mb' }));
 app.use(express_1.default.urlencoded({ limit: '10mb', extended: true }));
-// Middleware de logging
+// Middleware de logging seguro
 app.use((req, res, next) => {
-    console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
+    // Nunca logar dados sensíveis como req.body ou req.headers!
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
     next();
 });
 // Rota de teste

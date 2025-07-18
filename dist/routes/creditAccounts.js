@@ -1,12 +1,16 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const client_1 = require("@prisma/client");
 const zod_1 = require("../zod");
+const auth_1 = __importDefault(require("../middleware/auth"));
 const router = (0, express_1.Router)();
 const prisma = new client_1.PrismaClient();
 // Listar todas as contas de crédito
-router.get('/', async (req, res) => {
+router.get('/', auth_1.default, async (req, res) => {
     const contas = await prisma.credit_accounts.findMany({ include: { credit_transactions: true } });
     res.json(contas);
 });

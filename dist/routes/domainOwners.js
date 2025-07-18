@@ -1,11 +1,15 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const client_1 = require("@prisma/client");
+const auth_1 = __importDefault(require("../middleware/auth"));
 const router = (0, express_1.Router)();
 const prisma = new client_1.PrismaClient();
 // Listar todos os domínios
-router.get('/', async (req, res) => {
+router.get('/', auth_1.default, async (req, res) => {
     const dominios = await prisma.domain_owners.findMany({ include: { users: true } });
     res.json(dominios);
 });
