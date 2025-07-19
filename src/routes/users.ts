@@ -1,11 +1,9 @@
 import { Router } from 'express';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../lib/prisma';
 import authenticateJWT from '../middleware/auth';
 import { z } from 'zod';
 
 const router = Router();
-const prisma = new PrismaClient();
-
 function filtrarUsuario(user: any) {
   if (!user) return user;
   const { password, resetToken, emailToken, ...seguro } = user;

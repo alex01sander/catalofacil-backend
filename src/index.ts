@@ -4,7 +4,7 @@ import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
-import { PrismaClient } from '@prisma/client';
+import prisma from './lib/prisma';
 import productsRouter from './routes/products';
 import authRouter from './routes/auth';
 import siteRouter from './routes/site';
@@ -34,7 +34,9 @@ import identitiesRouter from './routes/identities';
 import type { CorsOptionsDelegate, CorsRequest } from 'cors';
 
 const app = express();
-const prisma = new PrismaClient();
+
+// Configuração para confiar no proxy do Render/Vercel
+app.set('trust proxy', 1);
 
 // Verificação de variáveis de ambiente obrigatórias
 const requiredEnv = ['DATABASE_URL', 'JWT_SECRET'];
@@ -91,6 +93,20 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   // Nunca logar dados sensíveis como req.body ou req.headers!
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
   next();
+});
+
+// Middleware para testar conexão com banco
+app.use(async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    // Testa conexão com banco apenas em rotas que precisam
+    if (req.path.startsWith('/auth') || req.path.startsWith('/products') || req.path.startsWith('/users')) {
+      await prisma.$queryRaw`SELECT 1`;
+    }
+    next();
+  } catch (error) {
+    console.error('Erro de conexão com banco:', error);
+    res.status(503).json({ error: 'Serviço temporariamente indisponível' });
+  }
 });
 
 // Rota de teste
@@ -158,13 +174,23 @@ const PORT = process.env.PORT || 3000;
 // Graceful shutdown
 process.on('SIGTERM', async () => {
   console.log('SIGTERM recebido, fechando servidor...');
-  await prisma.$disconnect();
+  try {
+    await prisma.$disconnect();
+    console.log('Prisma desconectado com sucesso');
+  } catch (error) {
+    console.error('Erro ao desconectar Prisma:', error);
+  }
   process.exit(0);
 });
 
 process.on('SIGINT', async () => {
   console.log('SIGINT recebido, fechando servidor...');
-  await prisma.$disconnect();
+  try {
+    await prisma.$disconnect();
+    console.log('Prisma desconectado com sucesso');
+  } catch (error) {
+    console.error('Erro ao desconectar Prisma:', error);
+  }
   process.exit(0);
 });
 

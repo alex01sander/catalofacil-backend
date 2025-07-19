@@ -1,17 +1,19 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
-const client_1 = require("@prisma/client");
+const prisma_1 = __importDefault(require("../lib/prisma"));
 const router = (0, express_1.Router)();
-const prisma = new client_1.PrismaClient();
 // Listar todos os admins de controller
 router.get('/', async (req, res) => {
-    const admins = await prisma.controller_admins.findMany({ include: { users: true } });
+    const admins = await prisma_1.default.controller_admins.findMany({ include: { users: true } });
     res.json(admins);
 });
 // Buscar admin por ID
 router.get('/:id', async (req, res) => {
-    const admin = await prisma.controller_admins.findUnique({
+    const admin = await prisma_1.default.controller_admins.findUnique({
         where: { id: req.params.id },
         include: { users: true }
     });
@@ -22,7 +24,7 @@ router.get('/:id', async (req, res) => {
 // Criar admin
 router.post('/', async (req, res) => {
     try {
-        const novo = await prisma.controller_admins.create({ data: req.body });
+        const novo = await prisma_1.default.controller_admins.create({ data: req.body });
         res.status(201).json(novo);
     }
     catch (e) {
@@ -32,7 +34,7 @@ router.post('/', async (req, res) => {
 // Atualizar admin
 router.put('/:id', async (req, res) => {
     try {
-        const atualizado = await prisma.controller_admins.update({
+        const atualizado = await prisma_1.default.controller_admins.update({
             where: { id: req.params.id },
             data: req.body,
         });
@@ -45,7 +47,7 @@ router.put('/:id', async (req, res) => {
 // Deletar admin
 router.delete('/:id', async (req, res) => {
     try {
-        await prisma.controller_admins.delete({ where: { id: req.params.id } });
+        await prisma_1.default.controller_admins.delete({ where: { id: req.params.id } });
         res.status(204).send();
     }
     catch (e) {

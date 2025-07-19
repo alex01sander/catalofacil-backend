@@ -4,18 +4,17 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
-const client_1 = require("@prisma/client");
+const prisma_1 = __importDefault(require("../lib/prisma"));
 const auth_1 = __importDefault(require("../middleware/auth"));
 const router = (0, express_1.Router)();
-const prisma = new client_1.PrismaClient();
 // Listar todos os domínios
 router.get('/', auth_1.default, async (req, res) => {
-    const dominios = await prisma.domain_owners.findMany({ include: { users: true } });
+    const dominios = await prisma_1.default.domain_owners.findMany({ include: { users: true } });
     res.json(dominios);
 });
 // Buscar domínio por ID
 router.get('/:id', async (req, res) => {
-    const dominio = await prisma.domain_owners.findUnique({
+    const dominio = await prisma_1.default.domain_owners.findUnique({
         where: { id: req.params.id },
         include: { users: true }
     });
@@ -26,7 +25,7 @@ router.get('/:id', async (req, res) => {
 // Criar domínio
 router.post('/', async (req, res) => {
     try {
-        const novo = await prisma.domain_owners.create({ data: req.body });
+        const novo = await prisma_1.default.domain_owners.create({ data: req.body });
         res.status(201).json(novo);
     }
     catch (e) {
@@ -36,7 +35,7 @@ router.post('/', async (req, res) => {
 // Atualizar domínio
 router.put('/:id', async (req, res) => {
     try {
-        const atualizado = await prisma.domain_owners.update({
+        const atualizado = await prisma_1.default.domain_owners.update({
             where: { id: req.params.id },
             data: req.body,
         });
@@ -49,7 +48,7 @@ router.put('/:id', async (req, res) => {
 // Deletar domínio
 router.delete('/:id', async (req, res) => {
     try {
-        await prisma.domain_owners.delete({ where: { id: req.params.id } });
+        await prisma_1.default.domain_owners.delete({ where: { id: req.params.id } });
         res.status(204).send();
     }
     catch (e) {

@@ -1,9 +1,6 @@
 import { Router } from 'express';
-import { PrismaClient } from '@prisma/client';
-
+import prisma from '../lib/prisma';
 const router = Router();
-const prisma = new PrismaClient();
-
 // Listar todos os logs de auditoria
 router.get('/', async (req, res) => {
   const logs = await prisma.audit_log_entries.findMany();

@@ -1,17 +1,19 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
-const client_1 = require("@prisma/client");
+const prisma_1 = __importDefault(require("../lib/prisma"));
 const router = (0, express_1.Router)();
-const prisma = new client_1.PrismaClient();
 // Listar todos os itens de pedido
 router.get('/', async (req, res) => {
-    const itens = await prisma.order_items.findMany({ include: { orders: true, products: true } });
+    const itens = await prisma_1.default.order_items.findMany({ include: { orders: true, products: true } });
     res.json(itens);
 });
 // Buscar item por ID
 router.get('/:id', async (req, res) => {
-    const item = await prisma.order_items.findUnique({
+    const item = await prisma_1.default.order_items.findUnique({
         where: { id: req.params.id },
         include: { orders: true, products: true }
     });
@@ -22,7 +24,7 @@ router.get('/:id', async (req, res) => {
 // Criar item de pedido
 router.post('/', async (req, res) => {
     try {
-        const novo = await prisma.order_items.create({ data: req.body });
+        const novo = await prisma_1.default.order_items.create({ data: req.body });
         res.status(201).json(novo);
     }
     catch (e) {
@@ -32,7 +34,7 @@ router.post('/', async (req, res) => {
 // Atualizar item de pedido
 router.put('/:id', async (req, res) => {
     try {
-        const atualizado = await prisma.order_items.update({
+        const atualizado = await prisma_1.default.order_items.update({
             where: { id: req.params.id },
             data: req.body,
         });
@@ -45,7 +47,7 @@ router.put('/:id', async (req, res) => {
 // Deletar item de pedido
 router.delete('/:id', async (req, res) => {
     try {
-        await prisma.order_items.delete({ where: { id: req.params.id } });
+        await prisma_1.default.order_items.delete({ where: { id: req.params.id } });
         res.status(204).send();
     }
     catch (e) {

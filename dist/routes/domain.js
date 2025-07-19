@@ -4,9 +4,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
-const client_1 = require("@prisma/client");
+const prisma_1 = __importDefault(require("../lib/prisma"));
 const auth_1 = __importDefault(require("../middleware/auth"));
-const prisma = new client_1.PrismaClient();
 const router = (0, express_1.Router)();
 // Criar domínio para o usuário autenticado
 router.post('/', auth_1.default, async (req, res) => {
@@ -16,11 +15,11 @@ router.post('/', auth_1.default, async (req, res) => {
     if (!slug)
         return res.status(400).json({ error: 'Slug é obrigatório' });
     // Verifica se já existe domínio com esse slug
-    const exists = await prisma.domain.findUnique({ where: { slug } });
+    const exists = await prisma_1.default.domain.findUnique({ where: { slug } });
     if (exists)
         return res.status(409).json({ error: 'Slug já está em uso' });
     // Cria domínio
-    const domain = await prisma.domain.create({
+    const domain = await prisma_1.default.domain.create({
         data: {
             slug,
             userId: req.user.id

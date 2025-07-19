@@ -8,7 +8,7 @@ const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
 const helmet_1 = __importDefault(require("helmet"));
 const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
-const client_1 = require("@prisma/client");
+const prisma_1 = __importDefault(require("./lib/prisma"));
 const products_1 = __importDefault(require("./routes/products"));
 const auth_1 = __importDefault(require("./routes/auth"));
 const site_1 = __importDefault(require("./routes/site"));
@@ -35,7 +35,8 @@ const expenses_1 = __importDefault(require("./routes/expenses"));
 const domainOwners_1 = __importDefault(require("./routes/domainOwners"));
 const identities_1 = __importDefault(require("./routes/identities"));
 const app = (0, express_1.default)();
-const prisma = new client_1.PrismaClient();
+// Configuração para confiar no proxy do Render/Vercel
+app.set('trust proxy', 1);
 // Verificação de variáveis de ambiente obrigatórias
 const requiredEnv = ['DATABASE_URL', 'JWT_SECRET'];
 const missingEnv = requiredEnv.filter((v) => !process.env[v]);
@@ -70,7 +71,7 @@ const corsOptions = async (req, callback) => {
     try {
         // Verifica se o domínio está cadastrado como slug na tabela Domain
         const slug = origin.replace('https://', '').replace('.catalofacil.com.br', '');
-        const domain = await prisma.domain.findFirst({ where: { slug } });
+        const domain = await prisma_1.default.domain.findFirst({ where: { slug } });
         if (domain)
             return callback(null, { origin: true, credentials: true, optionsSuccessStatus: 200 });
     }
@@ -88,6 +89,20 @@ app.use((req, res, next) => {
     // Nunca logar dados sensíveis como req.body ou req.headers!
     console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
     next();
+});
+// Middleware para testar conexão com banco
+app.use(async (req, res, next) => {
+    try {
+        // Testa conexão com banco apenas em rotas que precisam
+        if (req.path.startsWith('/auth') || req.path.startsWith('/products') || req.path.startsWith('/users')) {
+            await prisma_1.default.$queryRaw `SELECT 1`;
+        }
+        next();
+    }
+    catch (error) {
+        console.error('Erro de conexão com banco:', error);
+        res.status(503).json({ error: 'Serviço temporariamente indisponível' });
+    }
 });
 // Rota de teste
 app.get('/', (req, res) => {
@@ -148,12 +163,24 @@ const PORT = process.env.PORT || 3000;
 // Graceful shutdown
 process.on('SIGTERM', async () => {
     console.log('SIGTERM recebido, fechando servidor...');
-    await prisma.$disconnect();
+    try {
+        await prisma_1.default.$disconnect();
+        console.log('Prisma desconectado com sucesso');
+    }
+    catch (error) {
+        console.error('Erro ao desconectar Prisma:', error);
+    }
     process.exit(0);
 });
 process.on('SIGINT', async () => {
     console.log('SIGINT recebido, fechando servidor...');
-    await prisma.$disconnect();
+    try {
+        await prisma_1.default.$disconnect();
+        console.log('Prisma desconectado com sucesso');
+    }
+    catch (error) {
+        console.error('Erro ao desconectar Prisma:', error);
+    }
     process.exit(0);
 });
 app.listen(PORT, () => {

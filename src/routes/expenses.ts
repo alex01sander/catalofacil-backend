@@ -1,12 +1,10 @@
 import { Router } from 'express';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../lib/prisma';
 import { expensesCreateInputSchema, expensesUpdateInputSchema } from '../zod';
 import authenticateJWT from '../middleware/auth';
 import { z } from 'zod';
 
 const router = Router();
-const prisma = new PrismaClient();
-
 const idParamSchema = z.object({ id: z.string().min(1, 'ID obrigatório') });
 
 // Listar todas as despesas

@@ -1,7 +1,6 @@
 import { Router } from 'express';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../lib/prisma';
 import authenticateJWT from '../middleware/auth';
-const prisma = new PrismaClient();
 const router = Router();
 
 // Criar domínio para o usuário autenticado

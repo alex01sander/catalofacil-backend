@@ -1,17 +1,19 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
-const client_1 = require("@prisma/client");
+const prisma_1 = __importDefault(require("../lib/prisma"));
 const router = (0, express_1.Router)();
-const prisma = new client_1.PrismaClient();
 // Listar todos os saml_providers
 router.get('/', async (req, res) => {
-    const items = await prisma.saml_providers.findMany();
+    const items = await prisma_1.default.saml_providers.findMany();
     res.json(items);
 });
 // Buscar saml_provider por ID
 router.get('/:id', async (req, res) => {
-    const item = await prisma.saml_providers.findUnique({ where: { id: req.params.id } });
+    const item = await prisma_1.default.saml_providers.findUnique({ where: { id: req.params.id } });
     if (!item)
         return res.status(404).json({ error: 'Registro não encontrado' });
     res.json(item);
@@ -19,7 +21,7 @@ router.get('/:id', async (req, res) => {
 // Criar saml_provider
 router.post('/', async (req, res) => {
     try {
-        const novo = await prisma.saml_providers.create({ data: req.body });
+        const novo = await prisma_1.default.saml_providers.create({ data: req.body });
         res.status(201).json(novo);
     }
     catch (e) {
@@ -29,7 +31,7 @@ router.post('/', async (req, res) => {
 // Atualizar saml_provider
 router.put('/:id', async (req, res) => {
     try {
-        const atualizado = await prisma.saml_providers.update({
+        const atualizado = await prisma_1.default.saml_providers.update({
             where: { id: req.params.id },
             data: req.body,
         });
@@ -42,7 +44,7 @@ router.put('/:id', async (req, res) => {
 // Deletar saml_provider
 router.delete('/:id', async (req, res) => {
     try {
-        await prisma.saml_providers.delete({ where: { id: req.params.id } });
+        await prisma_1.default.saml_providers.delete({ where: { id: req.params.id } });
         res.status(204).send();
     }
     catch (e) {

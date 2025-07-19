@@ -1,24 +1,26 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
-const client_1 = require("@prisma/client");
+const prisma_1 = __importDefault(require("../lib/prisma"));
 const zod_1 = require("../zod");
 const router = (0, express_1.Router)();
-const prisma = new client_1.PrismaClient();
 // Listar todas as configurações de loja ou buscar por user_id
 router.get('/', async (req, res) => {
     const { user_id } = req.query;
     if (user_id) {
         // Busca única por user_id
-        const settings = await prisma.store_settings.findUnique({ where: { user_id: String(user_id) } });
+        const settings = await prisma_1.default.store_settings.findUnique({ where: { user_id: String(user_id) } });
         return res.json(settings);
     }
-    const settings = await prisma.store_settings.findMany({ include: { users: true } });
+    const settings = await prisma_1.default.store_settings.findMany({ include: { users: true } });
     res.json(settings);
 });
 // Buscar configuração de loja por ID
 router.get('/:id', async (req, res) => {
-    const setting = await prisma.store_settings.findUnique({
+    const setting = await prisma_1.default.store_settings.findUnique({
         where: { id: req.params.id },
         include: { users: true }
     });
@@ -33,7 +35,7 @@ router.post('/', async (req, res) => {
         return res.status(400).json({ error: 'Dados inválidos', details: parse.error.issues });
     }
     try {
-        const nova = await prisma.store_settings.create({ data: parse.data });
+        const nova = await prisma_1.default.store_settings.create({ data: parse.data });
         res.status(201).json(nova);
     }
     catch (e) {
@@ -47,7 +49,7 @@ router.put('/:id', async (req, res) => {
         return res.status(400).json({ error: 'Dados inválidos', details: parse.error.issues });
     }
     try {
-        const atualizada = await prisma.store_settings.update({
+        const atualizada = await prisma_1.default.store_settings.update({
             where: { id: req.params.id },
             data: parse.data,
         });
@@ -60,7 +62,7 @@ router.put('/:id', async (req, res) => {
 // Deletar configuração de loja
 router.delete('/:id', async (req, res) => {
     try {
-        await prisma.store_settings.delete({ where: { id: req.params.id } });
+        await prisma_1.default.store_settings.delete({ where: { id: req.params.id } });
         res.status(204).send();
     }
     catch (e) {

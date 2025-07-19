@@ -1,10 +1,8 @@
 import { Router } from 'express';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../lib/prisma';
 import authenticateJWT from '../middleware/auth';
 
 const router = Router();
-const prisma = new PrismaClient();
-
 // Listar todos os fluxos de caixa
 router.get('/', authenticateJWT, async (req, res) => {
   const fluxos = await prisma.cash_flow.findMany();

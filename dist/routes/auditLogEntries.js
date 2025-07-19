@@ -1,17 +1,19 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
-const client_1 = require("@prisma/client");
+const prisma_1 = __importDefault(require("../lib/prisma"));
 const router = (0, express_1.Router)();
-const prisma = new client_1.PrismaClient();
 // Listar todos os logs de auditoria
 router.get('/', async (req, res) => {
-    const logs = await prisma.audit_log_entries.findMany();
+    const logs = await prisma_1.default.audit_log_entries.findMany();
     res.json(logs);
 });
 // Buscar log de auditoria por ID
 router.get('/:id', async (req, res) => {
-    const log = await prisma.audit_log_entries.findUnique({ where: { id: req.params.id } });
+    const log = await prisma_1.default.audit_log_entries.findUnique({ where: { id: req.params.id } });
     if (!log)
         return res.status(404).json({ error: 'Log não encontrado' });
     res.json(log);
@@ -19,7 +21,7 @@ router.get('/:id', async (req, res) => {
 // Criar log de auditoria
 router.post('/', async (req, res) => {
     try {
-        const novo = await prisma.audit_log_entries.create({ data: req.body });
+        const novo = await prisma_1.default.audit_log_entries.create({ data: req.body });
         res.status(201).json(novo);
     }
     catch (e) {
@@ -29,7 +31,7 @@ router.post('/', async (req, res) => {
 // Atualizar log de auditoria
 router.put('/:id', async (req, res) => {
     try {
-        const atualizado = await prisma.audit_log_entries.update({
+        const atualizado = await prisma_1.default.audit_log_entries.update({
             where: { id: req.params.id },
             data: req.body,
         });
@@ -42,7 +44,7 @@ router.put('/:id', async (req, res) => {
 // Deletar log de auditoria
 router.delete('/:id', async (req, res) => {
     try {
-        await prisma.audit_log_entries.delete({ where: { id: req.params.id } });
+        await prisma_1.default.audit_log_entries.delete({ where: { id: req.params.id } });
         res.status(204).send();
     }
     catch (e) {

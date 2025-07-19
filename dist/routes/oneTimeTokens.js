@@ -1,17 +1,19 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
-const client_1 = require("@prisma/client");
+const prisma_1 = __importDefault(require("../lib/prisma"));
 const router = (0, express_1.Router)();
-const prisma = new client_1.PrismaClient();
 // Listar todos os one time tokens
 router.get('/', async (req, res) => {
-    const tokens = await prisma.one_time_tokens.findMany({ include: { users: true } });
+    const tokens = await prisma_1.default.one_time_tokens.findMany({ include: { users: true } });
     res.json(tokens);
 });
 // Buscar one time token por ID
 router.get('/:id', async (req, res) => {
-    const token = await prisma.one_time_tokens.findUnique({
+    const token = await prisma_1.default.one_time_tokens.findUnique({
         where: { id: req.params.id },
         include: { users: true }
     });
@@ -22,7 +24,7 @@ router.get('/:id', async (req, res) => {
 // Criar one time token
 router.post('/', async (req, res) => {
     try {
-        const novo = await prisma.one_time_tokens.create({ data: req.body });
+        const novo = await prisma_1.default.one_time_tokens.create({ data: req.body });
         res.status(201).json(novo);
     }
     catch (e) {
@@ -32,7 +34,7 @@ router.post('/', async (req, res) => {
 // Atualizar one time token
 router.put('/:id', async (req, res) => {
     try {
-        const atualizado = await prisma.one_time_tokens.update({
+        const atualizado = await prisma_1.default.one_time_tokens.update({
             where: { id: req.params.id },
             data: req.body,
         });
@@ -45,7 +47,7 @@ router.put('/:id', async (req, res) => {
 // Deletar one time token
 router.delete('/:id', async (req, res) => {
     try {
-        await prisma.one_time_tokens.delete({ where: { id: req.params.id } });
+        await prisma_1.default.one_time_tokens.delete({ where: { id: req.params.id } });
         res.status(204).send();
     }
     catch (e) {

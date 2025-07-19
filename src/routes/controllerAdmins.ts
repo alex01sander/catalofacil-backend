@@ -1,9 +1,6 @@
 import { Router } from 'express';
-import { PrismaClient } from '@prisma/client';
-
+import prisma from '../lib/prisma';
 const router = Router();
-const prisma = new PrismaClient();
-
 // Listar todos os admins de controller
 router.get('/', async (req, res) => {
   const admins = await prisma.controller_admins.findMany({ include: { users: true } });

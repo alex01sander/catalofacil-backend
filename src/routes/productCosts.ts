@@ -1,9 +1,6 @@
 import { Router } from 'express';
-import { PrismaClient } from '@prisma/client';
-
+import prisma from '../lib/prisma';
 const router = Router();
-const prisma = new PrismaClient();
-
 // Listar todos os custos de produto
 router.get('/', async (req, res) => {
   const custos = await prisma.product_costs.findMany();

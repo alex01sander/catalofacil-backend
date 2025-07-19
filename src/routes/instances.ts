@@ -1,9 +1,6 @@
 import { Router } from 'express';
-import { PrismaClient } from '@prisma/client';
-
+import prisma from '../lib/prisma';
 const router = Router();
-const prisma = new PrismaClient();
-
 // Listar todas as instances
 router.get('/', async (req, res) => {
   const items = await prisma.instances.findMany();

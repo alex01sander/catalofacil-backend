@@ -1,17 +1,19 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
-const client_1 = require("@prisma/client");
+const prisma_1 = __importDefault(require("../lib/prisma"));
 const router = (0, express_1.Router)();
-const prisma = new client_1.PrismaClient();
 // Listar todos os custos de produto
 router.get('/', async (req, res) => {
-    const custos = await prisma.product_costs.findMany();
+    const custos = await prisma_1.default.product_costs.findMany();
     res.json(custos);
 });
 // Buscar custo de produto por ID
 router.get('/:id', async (req, res) => {
-    const custo = await prisma.product_costs.findUnique({ where: { id: req.params.id } });
+    const custo = await prisma_1.default.product_costs.findUnique({ where: { id: req.params.id } });
     if (!custo)
         return res.status(404).json({ error: 'Custo de produto não encontrado' });
     res.json(custo);
@@ -19,7 +21,7 @@ router.get('/:id', async (req, res) => {
 // Criar custo de produto
 router.post('/', async (req, res) => {
     try {
-        const novo = await prisma.product_costs.create({ data: req.body });
+        const novo = await prisma_1.default.product_costs.create({ data: req.body });
         res.status(201).json(novo);
     }
     catch (e) {
@@ -29,7 +31,7 @@ router.post('/', async (req, res) => {
 // Atualizar custo de produto
 router.put('/:id', async (req, res) => {
     try {
-        const atualizado = await prisma.product_costs.update({
+        const atualizado = await prisma_1.default.product_costs.update({
             where: { id: req.params.id },
             data: req.body,
         });
@@ -42,7 +44,7 @@ router.put('/:id', async (req, res) => {
 // Deletar custo de produto
 router.delete('/:id', async (req, res) => {
     try {
-        await prisma.product_costs.delete({ where: { id: req.params.id } });
+        await prisma_1.default.product_costs.delete({ where: { id: req.params.id } });
         res.status(204).send();
     }
     catch (e) {

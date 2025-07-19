@@ -4,15 +4,14 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
-const client_1 = require("@prisma/client");
+const prisma_1 = __importDefault(require("../lib/prisma"));
 const zod_1 = require("../zod");
 const auth_1 = __importDefault(require("../middleware/auth"));
 const router = (0, express_1.Router)();
-const prisma = new client_1.PrismaClient();
 // Listar todas as transações de crédito
 router.get('/', auth_1.default, async (req, res) => {
     try {
-        const transacoes = await prisma.credit_transactions.findMany({
+        const transacoes = await prisma_1.default.credit_transactions.findMany({
             include: { credit_accounts: true }
         });
         res.json(transacoes);
@@ -25,7 +24,7 @@ router.get('/', auth_1.default, async (req, res) => {
 // Buscar transação de crédito por ID
 router.get('/:id', async (req, res) => {
     try {
-        const transacao = await prisma.credit_transactions.findUnique({
+        const transacao = await prisma_1.default.credit_transactions.findUnique({
             where: { id: req.params.id },
             include: { credit_accounts: true }
         });
@@ -49,7 +48,7 @@ router.post('/', async (req, res) => {
         if (!user || !user.id) {
             return res.status(401).json({ error: 'Usuário não autenticado' });
         }
-        const nova = await prisma.credit_transactions.create({
+        const nova = await prisma_1.default.credit_transactions.create({
             data: {
                 ...parse.data,
                 user_id: user.id,
@@ -70,7 +69,7 @@ router.put('/:id', async (req, res) => {
         return res.status(400).json({ error: 'Dados inválidos', details: parse.error.issues });
     }
     try {
-        const atualizada = await prisma.credit_transactions.update({
+        const atualizada = await prisma_1.default.credit_transactions.update({
             where: { id: req.params.id },
             data: parse.data,
         });
@@ -84,7 +83,7 @@ router.put('/:id', async (req, res) => {
 // Deletar transação de crédito
 router.delete('/:id', async (req, res) => {
     try {
-        await prisma.credit_transactions.delete({ where: { id: req.params.id } });
+        await prisma_1.default.credit_transactions.delete({ where: { id: req.params.id } });
         res.status(204).send();
     }
     catch (error) {

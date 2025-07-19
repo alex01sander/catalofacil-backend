@@ -1,10 +1,8 @@
 import { Router } from 'express';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../lib/prisma';
 import { store_settingsCreateInputSchema, store_settingsUpdateInputSchema } from '../zod';
 
 const router = Router();
-const prisma = new PrismaClient();
-
 // Listar todas as configurações de loja ou buscar por user_id
 router.get('/', async (req, res) => {
   const { user_id } = req.query;

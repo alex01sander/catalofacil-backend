@@ -1,11 +1,9 @@
 import { Router } from 'express';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../lib/prisma';
 import { credit_accountsCreateInputSchema, credit_accountsUpdateInputSchema } from '../zod';
 import authenticateJWT from '../middleware/auth';
 
 const router = Router();
-const prisma = new PrismaClient();
-
 // Listar todas as contas de crédito
 router.get('/', authenticateJWT, async (req, res) => {
   const contas = await prisma.credit_accounts.findMany({ include: { credit_transactions: true } });

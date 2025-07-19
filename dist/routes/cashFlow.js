@@ -4,18 +4,17 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
-const client_1 = require("@prisma/client");
+const prisma_1 = __importDefault(require("../lib/prisma"));
 const auth_1 = __importDefault(require("../middleware/auth"));
 const router = (0, express_1.Router)();
-const prisma = new client_1.PrismaClient();
 // Listar todos os fluxos de caixa
 router.get('/', auth_1.default, async (req, res) => {
-    const fluxos = await prisma.cash_flow.findMany();
+    const fluxos = await prisma_1.default.cash_flow.findMany();
     res.json(fluxos);
 });
 // Buscar fluxo de caixa por ID
 router.get('/:id', async (req, res) => {
-    const fluxo = await prisma.cash_flow.findUnique({ where: { id: req.params.id } });
+    const fluxo = await prisma_1.default.cash_flow.findUnique({ where: { id: req.params.id } });
     if (!fluxo)
         return res.status(404).json({ error: 'Fluxo de caixa não encontrado' });
     res.json(fluxo);
@@ -23,7 +22,7 @@ router.get('/:id', async (req, res) => {
 // Criar fluxo de caixa
 router.post('/', async (req, res) => {
     try {
-        const novo = await prisma.cash_flow.create({ data: req.body });
+        const novo = await prisma_1.default.cash_flow.create({ data: req.body });
         res.status(201).json(novo);
     }
     catch (e) {
@@ -33,7 +32,7 @@ router.post('/', async (req, res) => {
 // Atualizar fluxo de caixa
 router.put('/:id', async (req, res) => {
     try {
-        const atualizado = await prisma.cash_flow.update({
+        const atualizado = await prisma_1.default.cash_flow.update({
             where: { id: req.params.id },
             data: req.body,
         });
@@ -46,7 +45,7 @@ router.put('/:id', async (req, res) => {
 // Deletar fluxo de caixa
 router.delete('/:id', async (req, res) => {
     try {
-        await prisma.cash_flow.delete({ where: { id: req.params.id } });
+        await prisma_1.default.cash_flow.delete({ where: { id: req.params.id } });
         res.status(204).send();
     }
     catch (e) {

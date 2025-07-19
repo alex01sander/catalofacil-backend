@@ -1,11 +1,10 @@
 // src/routes/products.ts
 import { Router } from 'express';
-import { PrismaClient } from '@prisma/client';
 import authenticateJWT from '../middleware/auth';
 import { productsCreateInputSchema, productsUpdateInputSchema } from '../zod';
 import { z } from 'zod';
+import prisma from '../lib/prisma';
 
-const prisma = new PrismaClient();
 const router = Router();
 
 const idParamSchema = z.object({ id: z.string().min(1, 'ID obrigatório') });

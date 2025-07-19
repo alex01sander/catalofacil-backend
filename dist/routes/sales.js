@@ -4,17 +4,16 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
-const client_1 = require("@prisma/client");
+const prisma_1 = __importDefault(require("../lib/prisma"));
 const zod_1 = require("../zod");
 const auth_1 = __importDefault(require("../middleware/auth"));
 const zod_2 = require("zod");
 const router = (0, express_1.Router)();
-const prisma = new client_1.PrismaClient();
 const idParamSchema = zod_2.z.object({ id: zod_2.z.string().min(1, 'ID obrigatório') });
 // Listar todas as vendas
 router.get('/', auth_1.default, async (req, res) => {
     try {
-        const vendas = await prisma.sales.findMany({ include: { stores: true } });
+        const vendas = await prisma_1.default.sales.findMany({ include: { stores: true } });
         res.json(vendas);
     }
     catch (error) {
@@ -29,7 +28,7 @@ router.get('/:id', auth_1.default, async (req, res) => {
         return res.status(400).json({ error: 'Parâmetro inválido', details: parse.error.issues });
     }
     try {
-        const venda = await prisma.sales.findUnique({
+        const venda = await prisma_1.default.sales.findUnique({
             where: { id: req.params.id },
             include: { stores: true }
         });
@@ -49,7 +48,7 @@ router.post('/', async (req, res) => {
         return res.status(400).json({ error: 'Dados inválidos', details: parse.error.issues });
     }
     try {
-        const nova = await prisma.sales.create({ data: parse.data });
+        const nova = await prisma_1.default.sales.create({ data: parse.data });
         res.status(201).json(nova);
     }
     catch (error) {
@@ -68,7 +67,7 @@ router.put('/:id', auth_1.default, async (req, res) => {
         return res.status(400).json({ error: 'Dados inválidos', details: parseBody.error.issues });
     }
     try {
-        const atualizada = await prisma.sales.update({
+        const atualizada = await prisma_1.default.sales.update({
             where: { id: req.params.id },
             data: parseBody.data,
         });
@@ -86,7 +85,7 @@ router.delete('/:id', auth_1.default, async (req, res) => {
         return res.status(400).json({ error: 'Parâmetro inválido', details: parse.error.issues });
     }
     try {
-        await prisma.sales.delete({ where: { id: req.params.id } });
+        await prisma_1.default.sales.delete({ where: { id: req.params.id } });
         res.status(204).send();
     }
     catch (error) {

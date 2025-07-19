@@ -4,15 +4,14 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
-const client_1 = require("@prisma/client");
+const prisma_1 = __importDefault(require("../lib/prisma"));
 const auth_1 = __importDefault(require("../middleware/auth"));
 const zod_1 = require("zod");
 const router = (0, express_1.Router)();
-const prisma = new client_1.PrismaClient();
 const idParamSchema = zod_1.z.object({ id: zod_1.z.string().min(1, 'ID obrigatório') });
 // Listar todas as lojas
 router.get('/', auth_1.default, async (req, res) => {
-    const lojas = await prisma.stores.findMany({ include: { categories: true, customers: true, orders: true, products: true, sales: true } });
+    const lojas = await prisma_1.default.stores.findMany({ include: { categories: true, customers: true, orders: true, products: true, sales: true } });
     res.json(lojas);
 });
 // Buscar loja por ID
@@ -21,7 +20,7 @@ router.get('/:id', auth_1.default, async (req, res) => {
     if (!parse.success) {
         return res.status(400).json({ error: 'Parâmetro inválido', details: parse.error.issues });
     }
-    const loja = await prisma.stores.findUnique({
+    const loja = await prisma_1.default.stores.findUnique({
         where: { id: req.params.id },
         include: { categories: true, customers: true, orders: true, products: true, sales: true }
     });
@@ -32,7 +31,7 @@ router.get('/:id', auth_1.default, async (req, res) => {
 // Criar loja
 router.post('/', async (req, res) => {
     try {
-        const nova = await prisma.stores.create({ data: req.body });
+        const nova = await prisma_1.default.stores.create({ data: req.body });
         res.status(201).json(nova);
     }
     catch (e) {
@@ -46,7 +45,7 @@ router.put('/:id', auth_1.default, async (req, res) => {
         return res.status(400).json({ error: 'Parâmetro inválido', details: parse.error.issues });
     }
     try {
-        const atualizada = await prisma.stores.update({
+        const atualizada = await prisma_1.default.stores.update({
             where: { id: req.params.id },
             data: req.body,
         });
@@ -63,7 +62,7 @@ router.delete('/:id', auth_1.default, async (req, res) => {
         return res.status(400).json({ error: 'Parâmetro inválido', details: parse.error.issues });
     }
     try {
-        await prisma.stores.delete({ where: { id: req.params.id } });
+        await prisma_1.default.stores.delete({ where: { id: req.params.id } });
         res.status(204).send();
     }
     catch (e) {

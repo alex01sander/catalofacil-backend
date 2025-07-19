@@ -1,9 +1,6 @@
 import { Router } from 'express';
-import { PrismaClient } from '@prisma/client';
-
+import prisma from '../lib/prisma';
 const router = Router();
-const prisma = new PrismaClient();
-
 // Listar todos os one time tokens
 router.get('/', async (req, res) => {
   const tokens = await prisma.one_time_tokens.findMany({ include: { users: true } });

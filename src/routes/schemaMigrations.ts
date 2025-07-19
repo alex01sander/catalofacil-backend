@@ -1,9 +1,6 @@
 import { Router } from 'express';
-import { PrismaClient } from '@prisma/client';
-
+import prisma from '../lib/prisma';
 const router = Router();
-const prisma = new PrismaClient();
-
 // Listar todos os schema_migrations
 router.get('/', async (req, res) => {
   const items = await prisma.schema_migrations.findMany();
