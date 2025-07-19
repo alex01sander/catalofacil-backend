@@ -165,6 +165,7 @@ app.use('/vendas', salesRouter); // Alias em português
 app.use('/cashFlow', cashFlowRouter);
 app.use('/fluxo-caixa', cashFlowRouter); // Alias em português
 app.use('/creditAccounts', creditAccountsRouter);
+app.use('/credit-accounts', creditAccountsRouter); // Alias com hífen
 app.use('/creditTransactions', creditTransactionsRouter);
 app.use('/customers', customersRouter);
 
