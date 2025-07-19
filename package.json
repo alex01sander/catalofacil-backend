@@ -22,6 +22,7 @@
     "express-rate-limit": "^7.1.5",
     "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.2",
+    "node-fetch": "^3.3.2",
     "prisma": "^6.11.1",
     "prisma-zod-generator": "^0.8.13",
     "zod": "^4.0.5",
