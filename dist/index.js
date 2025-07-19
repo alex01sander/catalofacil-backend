@@ -23,7 +23,6 @@ const categories_1 = __importDefault(require("./routes/categories"));
 const instances_1 = __importDefault(require("./routes/instances"));
 const profiles_1 = __importDefault(require("./routes/profiles"));
 const mfaChallenges_1 = __importDefault(require("./routes/mfaChallenges"));
-const customers_1 = __importDefault(require("./routes/customers"));
 const samlRelayStates_1 = __importDefault(require("./routes/samlRelayStates"));
 const codeChallengeMethod_1 = __importDefault(require("./routes/codeChallengeMethod"));
 const controllerAdmins_1 = __importDefault(require("./routes/controllerAdmins"));
@@ -34,6 +33,12 @@ const mfaFactors_1 = __importDefault(require("./routes/mfaFactors"));
 const expenses_1 = __importDefault(require("./routes/expenses"));
 const domainOwners_1 = __importDefault(require("./routes/domainOwners"));
 const identities_1 = __importDefault(require("./routes/identities"));
+const orders_1 = __importDefault(require("./routes/orders"));
+const sales_1 = __importDefault(require("./routes/sales"));
+const cashFlow_1 = __importDefault(require("./routes/cashFlow"));
+const creditAccounts_1 = __importDefault(require("./routes/creditAccounts"));
+const creditTransactions_1 = __importDefault(require("./routes/creditTransactions"));
+const customers_1 = __importDefault(require("./routes/customers"));
 const app = (0, express_1.default)();
 // Configuração para confiar no proxy do Render/Vercel
 app.set('trust proxy', 1);
@@ -127,6 +132,7 @@ app.use('/ssoDomains', ssoDomains_1.default);
 app.use('/flowState', flowState_1.default);
 app.use('/users', users_1.default);
 app.use('/categories', categories_1.default);
+app.use('/categorias', categories_1.default); // Alias em português
 app.use('/instances', instances_1.default);
 app.use('/profiles', profiles_1.default);
 app.use('/mfaChallenges', mfaChallenges_1.default);
@@ -139,8 +145,18 @@ app.use('/storeSettings', storeSettings_1.default);
 app.use('/mfaAmrClaims', mfaAmrClaims_1.default);
 app.use('/mfaFactors', mfaFactors_1.default);
 app.use('/expenses', expenses_1.default);
+app.use('/despesas', expenses_1.default); // Alias em português
 app.use('/domainOwners', domainOwners_1.default);
 app.use('/identities', identities_1.default);
+app.use('/orders', orders_1.default);
+app.use('/pedidos', orders_1.default); // Alias em português
+app.use('/sales', sales_1.default);
+app.use('/vendas', sales_1.default); // Alias em português
+app.use('/cashFlow', cashFlow_1.default);
+app.use('/fluxo-caixa', cashFlow_1.default); // Alias em português
+app.use('/creditAccounts', creditAccounts_1.default);
+app.use('/creditTransactions', creditTransactions_1.default);
+app.use('/customers', customers_1.default);
 // Middleware para rotas não encontradas
 app.use('*', (req, res) => {
     res.status(404).json({ error: 'Rota não encontrada' });

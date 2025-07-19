@@ -19,7 +19,6 @@ import categoriesRouter from './routes/categories';
 import instancesRouter from './routes/instances';
 import profilesRouter from './routes/profiles';
 import mfaChallengesRouter from './routes/mfaChallenges';
-import customersRouter from './routes/customers';
 import samlRelayStatesRouter from './routes/samlRelayStates';
 import codeChallengeMethodRouter from './routes/codeChallengeMethod';
 import controllerAdminsRouter from './routes/controllerAdmins';
@@ -30,6 +29,12 @@ import mfaFactorsRouter from './routes/mfaFactors';
 import expensesRouter from './routes/expenses';
 import domainOwnersRouter from './routes/domainOwners';
 import identitiesRouter from './routes/identities';
+import ordersRouter from './routes/orders';
+import salesRouter from './routes/sales';
+import cashFlowRouter from './routes/cashFlow';
+import creditAccountsRouter from './routes/creditAccounts';
+import creditTransactionsRouter from './routes/creditTransactions';
+import customersRouter from './routes/customers';
 
 import type { CorsOptionsDelegate, CorsRequest } from 'cors';
 
@@ -137,6 +142,7 @@ app.use('/ssoDomains', ssoDomainsRouter);
 app.use('/flowState', flowStateRouter);
 app.use('/users', usersRouter);
 app.use('/categories', categoriesRouter);
+app.use('/categorias', categoriesRouter); // Alias em português
 app.use('/instances', instancesRouter);
 app.use('/profiles', profilesRouter);
 app.use('/mfaChallenges', mfaChallengesRouter);
@@ -149,8 +155,18 @@ app.use('/storeSettings', storeSettingsRouter);
 app.use('/mfaAmrClaims', mfaAmrClaimsRouter);
 app.use('/mfaFactors', mfaFactorsRouter);
 app.use('/expenses', expensesRouter);
+app.use('/despesas', expensesRouter); // Alias em português
 app.use('/domainOwners', domainOwnersRouter);
 app.use('/identities', identitiesRouter);
+app.use('/orders', ordersRouter);
+app.use('/pedidos', ordersRouter); // Alias em português
+app.use('/sales', salesRouter);
+app.use('/vendas', salesRouter); // Alias em português
+app.use('/cashFlow', cashFlowRouter);
+app.use('/fluxo-caixa', cashFlowRouter); // Alias em português
+app.use('/creditAccounts', creditAccountsRouter);
+app.use('/creditTransactions', creditTransactionsRouter);
+app.use('/customers', customersRouter);
 
 // Middleware para rotas não encontradas
 app.use('*', (req: Request, res: Response) => {
