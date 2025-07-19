@@ -64,9 +64,11 @@ const corsOptions = async (req, callback) => {
     // Permite requisições sem origin (ex: ferramentas internas, curl, etc)
     if (!origin)
         return callback(null, { origin: true, credentials: true, optionsSuccessStatus: 200 });
-    // Permite todos os subdomínios de catalofacil.com.br
-    if (origin.endsWith('.catalofacil.com.br'))
+    // Permite todos os subdomínios e o domínio principal catalofacil.catalofacil.com.br
+    if (origin.endsWith('.catalofacil.com.br') ||
+        origin === 'https://catalofacil.catalofacil.com.br') {
         return callback(null, { origin: true, credentials: true, optionsSuccessStatus: 200 });
+    }
     // Permite o domínio principal
     if (origin === 'https://catalofacil.com.br')
         return callback(null, { origin: true, credentials: true, optionsSuccessStatus: 200 });
