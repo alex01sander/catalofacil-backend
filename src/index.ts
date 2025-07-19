@@ -95,19 +95,7 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   next();
 });
 
-// Middleware para testar conexão com banco
-app.use(async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    // Testa conexão com banco apenas em rotas que precisam
-    if (req.path.startsWith('/auth') || req.path.startsWith('/products') || req.path.startsWith('/users')) {
-      await prisma.$queryRaw`SELECT 1`;
-    }
-    next();
-  } catch (error) {
-    console.error('Erro de conexão com banco:', error);
-    res.status(503).json({ error: 'Serviço temporariamente indisponível' });
-  }
-});
+
 
 // Rota de teste
 app.get('/', (req: Request, res: Response) => {
