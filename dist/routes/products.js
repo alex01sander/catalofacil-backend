@@ -20,12 +20,13 @@ router.post('/', auth_1.default, async (req, res) => {
         return res.status(400).json({ error: 'Dados inválidos', details: parse.error.issues });
     }
     try {
-        const product = await prisma_1.default.products.create({
-            data: {
-                ...parse.data,
-                user_id: req.user.id
-            }
-        });
+        const data = {
+            ...parse.data,
+            user_id: req.user.id,
+            category_id: req.body.category, // mapeia category para category_id
+            is_active: req.body.isActive // mapeia isActive para is_active
+        };
+        const product = await prisma_1.default.products.create({ data });
         res.status(201).json(product);
     }
     catch (error) {
