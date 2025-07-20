@@ -13,16 +13,17 @@ const router = (0, express_1.Router)();
 const idParamSchema = zod_2.z.object({ id: zod_2.z.string().min(1, 'ID obrigatório') });
 // Criar produto
 router.post('/', auth_1.default, async (req, res) => {
+    if (!req.user)
+        return res.status(401).json({ error: 'Usuário não autenticado' });
     const parse = zod_1.productsCreateInputSchema.safeParse(req.body);
     if (!parse.success) {
         return res.status(400).json({ error: 'Dados inválidos', details: parse.error.issues });
     }
     try {
-        const { user_id, ...rest } = parse.data;
         const product = await prisma_1.default.products.create({
             data: {
-                ...rest,
-                users: { connect: { id: user_id } }
+                ...parse.data,
+                user_id: req.user.id
             }
         });
         res.status(201).json(product);

@@ -11,17 +11,18 @@ const idParamSchema = z.object({ id: z.string().min(1, 'ID obrigatório') });
 
 // Criar produto
 router.post('/', authenticateJWT, async (req, res) => {
+  if (!req.user) return res.status(401).json({ error: 'Usuário não autenticado' });
+
   const parse = productsCreateInputSchema.safeParse(req.body);
   if (!parse.success) {
     return res.status(400).json({ error: 'Dados inválidos', details: parse.error.issues });
   }
   
   try {
-    const { user_id, ...rest } = parse.data;
     const product = await prisma.products.create({
       data: {
-        ...rest,
-        users: { connect: { id: user_id } }
+        ...parse.data,
+        user_id: req.user.id
       }
     });
     res.status(201).json(product);
