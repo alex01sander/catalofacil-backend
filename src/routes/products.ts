@@ -22,8 +22,11 @@ router.post('/', authenticateJWT, async (req, res) => {
     const data = {
       ...parse.data,
       user_id: req.user.id,
-      category_id: req.body.category, // mapeia category para category_id
-      is_active: req.body.isActive    // mapeia isActive para is_active
+      category_id: req.body.category || null, // mapeia category para category_id
+      is_active: req.body.isActive,           // mapeia isActive para is_active
+      description: req.body.description || null,
+      image: req.body.image || null,
+      images: req.body.images || []
     };
     const product = await prisma.products.create({ data });
     res.status(201).json(product);
