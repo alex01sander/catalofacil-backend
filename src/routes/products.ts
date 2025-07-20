@@ -13,26 +13,28 @@ const idParamSchema = z.object({ id: z.string().min(1, 'ID obrigatório') });
 router.post('/', authenticateJWT, async (req, res) => {
   if (!req.user) return res.status(401).json({ error: 'Usuário não autenticado' });
 
-  const parse = productsCreateInputSchema.safeParse(req.body);
-  if (!parse.success) {
-    return res.status(400).json({ error: 'Dados inválidos', details: parse.error.issues });
-  }
+  // Log para debug
+  console.log('Dados recebidos para criar produto:', req.body);
 
   try {
-    const data = {
-      ...parse.data,
-      user_id: req.user.id,
-      category_id: req.body.category || null, // mapeia category para category_id
-      is_active: req.body.isActive,           // mapeia isActive para is_active
-      description: req.body.description || null,
-      image: req.body.image || null,
-      images: req.body.images || []
-    };
-    const product = await prisma.products.create({ data });
+    const product = await prisma.products.create({
+      data: {
+        name: req.body.name,
+        price: req.body.price,
+        stock: req.body.stock,
+        is_active: req.body.isActive,
+        user_id: req.user.id,
+        category_id: req.body.category || null,
+        description: req.body.description || null,
+        image: req.body.image || null,
+        images: req.body.images || [],
+        // adicione outros campos obrigatórios aqui se necessário
+      }
+    });
     res.status(201).json(product);
   } catch (error) {
     console.error('Erro ao criar produto:', error);
-    res.status(500).json({ error: 'Erro interno do servidor' });
+    res.status(500).json({ error: 'Erro interno do servidor', details: error });
   }
 });
 
