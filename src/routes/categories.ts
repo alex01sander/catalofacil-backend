@@ -41,7 +41,7 @@ router.post('/', authenticateJWT, async (req, res) => {
     
     const data = {
       ...parse.data,
-      userId: req.user.id
+      user_id: req.user.id
     };
     
     const nova = await prisma.categories.create({ data });
