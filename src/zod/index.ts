@@ -58,19 +58,17 @@ export const credit_transactionsUpdateInputSchema = z.object({
 
 // Categories
 export const categoriesCreateInputSchema = z.object({
-  user_id: z.string(),
   name: z.string(),
   color: z.string().optional(),
   image: z.string().optional(),
-  store_id: z.string().optional(),
+  storeId: z.string().optional(),
 });
 
 export const categoriesUpdateInputSchema = z.object({
-  user_id: z.string().optional(),
   name: z.string().optional(),
   color: z.string().optional(),
   image: z.string().optional(),
-  store_id: z.string().optional(),
+  storeId: z.string().optional(),
 });
 
 // Customers

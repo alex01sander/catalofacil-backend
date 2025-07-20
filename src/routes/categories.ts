@@ -28,15 +28,26 @@ router.get('/:id', authenticateJWT, async (req, res) => {
 });
 
 // Criar categoria
-router.post('/', async (req, res) => {
+router.post('/', authenticateJWT, async (req, res) => {
   const parse = categoriesCreateInputSchema.safeParse(req.body);
   if (!parse.success) {
     return res.status(400).json({ error: 'Dados inválidos', details: parse.error.issues });
   }
   try {
-    const nova = await prisma.categories.create({ data: parse.data });
+    // Adicionar o userId do usuário autenticado
+    if (!req.user) {
+      return res.status(401).json({ error: 'Usuário não autenticado' });
+    }
+    
+    const data = {
+      ...parse.data,
+      userId: req.user.id
+    };
+    
+    const nova = await prisma.categories.create({ data });
     res.status(201).json(nova);
   } catch (e) {
+    console.error('Erro ao criar categoria:', e);
     res.status(400).json({ error: 'Erro ao criar categoria', details: e });
   }
 });
