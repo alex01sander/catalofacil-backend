@@ -42,7 +42,8 @@ router.post('/', auth_1.default, async (req, res) => {
         }
         const data = {
             ...parse.data,
-            user_id: req.user.id
+            user_id: req.user.id,
+            store_id: req.body.store_id // O frontend deve enviar o store_id correto!
         };
         const nova = await prisma_1.default.categories.create({ data });
         res.status(201).json(nova);

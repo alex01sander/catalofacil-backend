@@ -41,7 +41,8 @@ router.post('/', authenticateJWT, async (req, res) => {
     
     const data = {
       ...parse.data,
-      user_id: req.user.id
+      user_id: req.user.id,
+      store_id: req.body.store_id // O frontend deve enviar o store_id correto!
     };
     
     const nova = await prisma.categories.create({ data });

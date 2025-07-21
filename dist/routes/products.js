@@ -29,6 +29,7 @@ router.post('/', auth_1.default, async (req, res) => {
                 description: req.body.description || null,
                 image: req.body.image || null,
                 images: req.body.images || [],
+                store_id: req.body.store_id, // O frontend deve enviar o store_id correto!
                 // adicione outros campos obrigatórios aqui se necessário
             }
         });
