@@ -5,12 +5,13 @@
   "main": "dist/index.js",
   "scripts": {
     "start": "node dist/index.js",
-    "build": "tsc && npx prisma generate",
+    "build": "tsc && npx prisma generate && npm run copy-non-ts",
     "dev": "ts-node src/index.ts",
     "postinstall": "npx prisma generate",
     "db:migrate": "npx prisma migrate deploy",
     "db:push": "npx prisma db push",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "copy-non-ts": "if not exist dist\\lib mkdir dist\\lib && xcopy src\\lib\\supabase.js dist\\lib\\ /Y"
   },
   "dependencies": {
     "@prisma/client": "^6.11.1",
