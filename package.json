@@ -11,7 +11,7 @@
     "db:migrate": "npx prisma migrate deploy",
     "db:push": "npx prisma db push",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "copy-non-ts": "if not exist dist\\lib mkdir dist\\lib && xcopy src\\lib\\supabase.js dist\\lib\\ /Y"
+    "copy-non-ts": "cpx \"src/lib/supabase.js\" dist/lib/"
   },
   "dependencies": {
     "@prisma/client": "^6.11.1",
@@ -38,6 +38,7 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/multer": "^2.0.0",
     "@types/node": "^24.0.13",
+    "cpx": "^1.5.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.8.3"
   },
