@@ -9,15 +9,30 @@ const auth_1 = __importDefault(require("../middleware/auth"));
 const zod_1 = require("../zod");
 const zod_2 = require("zod");
 const prisma_1 = __importDefault(require("../lib/prisma"));
+const multer_1 = __importDefault(require("multer"));
+const supabase_1 = __importDefault(require("../lib/supabase"));
 const router = (0, express_1.Router)();
 const idParamSchema = zod_2.z.object({ id: zod_2.z.string().min(1, 'ID obrigatório') });
-// Criar produto
-router.post('/', auth_1.default, async (req, res) => {
+const upload = (0, multer_1.default)({ storage: multer_1.default.memoryStorage() });
+// Criar produto com upload de imagem
+router.post('/', auth_1.default, upload.single('image'), async (req, res) => {
     if (!req.user)
         return res.status(401).json({ error: 'Usuário não autenticado' });
-    // Log para debug
-    console.log('Dados recebidos para criar produto:', req.body);
     try {
+        let imageUrl = null;
+        if (req.file) {
+            // Upload para Supabase
+            const fileExt = req.file.originalname.split('.').pop();
+            const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${fileExt}`;
+            const { data, error } = await supabase_1.default.storage.from('products').upload(fileName, req.file.buffer, {
+                contentType: req.file.mimetype
+            });
+            if (error) {
+                return res.status(500).json({ error: 'Erro ao fazer upload da imagem', details: error.message });
+            }
+            // Monta a URL pública
+            imageUrl = `${process.env.SUPABASE_URL}/storage/v1/object/public/products/${fileName}`;
+        }
         const product = await prisma_1.default.products.create({
             data: {
                 name: req.body.name,
@@ -27,8 +42,8 @@ router.post('/', auth_1.default, async (req, res) => {
                 user_id: req.user.id,
                 category_id: req.body.category || null,
                 description: req.body.description || null,
-                image: req.body.image || null,
-                images: req.body.images || [],
+                image: imageUrl,
+                images: imageUrl ? [imageUrl] : [],
                 store_id: req.body.store_id, // O frontend deve enviar o store_id correto!
                 // adicione outros campos obrigatórios aqui se necessário
             }

@@ -4,19 +4,46 @@ import authenticateJWT from '../middleware/auth';
 import { productsCreateInputSchema, productsUpdateInputSchema } from '../zod';
 import { z } from 'zod';
 import prisma from '../lib/prisma';
+import multer from 'multer';
+import supabase from '../lib/supabase';
+
+// Adicionar tipagem para req.file
+import { Request } from 'express';
+import type { Multer } from 'multer';
+declare global {
+  namespace Express {
+    interface Request {
+      file?: Multer.File;
+    }
+  }
+}
 
 const router = Router();
 
 const idParamSchema = z.object({ id: z.string().min(1, 'ID obrigatório') });
 
-// Criar produto
-router.post('/', authenticateJWT, async (req, res) => {
+const upload = multer({ storage: multer.memoryStorage() });
+
+// Criar produto com upload de imagem
+router.post('/', authenticateJWT, upload.single('image'), async (req, res) => {
   if (!req.user) return res.status(401).json({ error: 'Usuário não autenticado' });
 
-  // Log para debug
-  console.log('Dados recebidos para criar produto:', req.body);
-
   try {
+    let imageUrl = null;
+    if (req.file) {
+      // Upload para Supabase
+      const fileExt = req.file.originalname.split('.').pop();
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${fileExt}`;
+      const { data, error } = await supabase.storage.from('products').upload(fileName, req.file.buffer, {
+        contentType: req.file.mimetype
+      });
+      if (error) {
+        return res.status(500).json({ error: 'Erro ao fazer upload da imagem', details: error.message });
+      }
+      // Monta a URL pública
+      imageUrl = `${process.env.SUPABASE_URL}/storage/v1/object/public/products/${fileName}`;
+    }
+
     const product = await prisma.products.create({
       data: {
         name: req.body.name,
@@ -26,8 +53,8 @@ router.post('/', authenticateJWT, async (req, res) => {
         user_id: req.user.id,
         category_id: req.body.category || null,
         description: req.body.description || null,
-        image: req.body.image || null,
-        images: req.body.images || [],
+        image: imageUrl,
+        images: imageUrl ? [imageUrl] : [],
         store_id: req.body.store_id, // O frontend deve enviar o store_id correto!
         // adicione outros campos obrigatórios aqui se necessário
       }
