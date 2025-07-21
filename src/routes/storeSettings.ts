@@ -1,10 +1,11 @@
 import { Router } from 'express';
 import prisma from '../lib/prisma';
 import { store_settingsCreateInputSchema, store_settingsUpdateInputSchema } from '../zod';
+import authenticateJWT from '../middleware/auth';
 
 const router = Router();
 // Listar todas as configurações de loja ou buscar por user_id
-router.get('/', async (req, res) => {
+router.get('/', authenticateJWT, async (req, res) => {
   const { user_id } = req.query;
   if (user_id) {
     // Busca única por user_id
@@ -16,7 +17,7 @@ router.get('/', async (req, res) => {
 });
 
 // Buscar configuração de loja por ID
-router.get('/:id', async (req, res) => {
+router.get('/:id', authenticateJWT, async (req, res) => {
   const setting = await prisma.store_settings.findUnique({
     where: { id: req.params.id },
     include: { users: true }
@@ -26,7 +27,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // Criar configuração de loja
-router.post('/', async (req, res) => {
+router.post('/', authenticateJWT, async (req, res) => {
   const parse = store_settingsCreateInputSchema.safeParse(req.body);
   if (!parse.success) {
     return res.status(400).json({ error: 'Dados inválidos', details: parse.error.issues });
@@ -40,7 +41,7 @@ router.post('/', async (req, res) => {
 });
 
 // Atualizar configuração de loja
-router.put('/:id', async (req, res) => {
+router.put('/:id', authenticateJWT, async (req, res) => {
   const parse = store_settingsUpdateInputSchema.safeParse(req.body);
   if (!parse.success) {
     return res.status(400).json({ error: 'Dados inválidos', details: parse.error.issues });
@@ -57,7 +58,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // Deletar configuração de loja
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', authenticateJWT, async (req, res) => {
   try {
     await prisma.store_settings.delete({ where: { id: req.params.id } });
     res.status(204).send();
