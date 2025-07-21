@@ -74,4 +74,28 @@ router.get('/public/:slug/products', async (req, res) => {
     });
     res.json(produtos);
 });
+// Rota pública: categorias disponíveis para compra
+router.get('/public/:slug/categories', async (req, res) => {
+    const parse = slugParamSchema.safeParse({ slug: req.params.slug });
+    if (!parse.success) {
+        return res.status(400).json({ error: 'Parâmetro inválido', details: parse.error.issues });
+    }
+    const { slug } = req.params;
+    // Busca a loja pelo slug
+    const loja = await prisma_1.default.stores.findUnique({ where: { slug }, select: { id: true } });
+    if (!loja)
+        return res.status(404).json({ error: 'Loja não encontrada' });
+    // Busca categorias dessa loja
+    const categorias = await prisma_1.default.categories.findMany({
+        where: { store_id: loja.id },
+        select: {
+            id: true,
+            name: true,
+            color: true,
+            image: true,
+            // Adicione outros campos públicos se necessário
+        }
+    });
+    res.json(categorias);
+});
 exports.default = router;
