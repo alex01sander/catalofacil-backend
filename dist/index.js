@@ -61,20 +61,23 @@ app.use(limiter);
 // CORS dinâmico para multi-tenant (subdomínios e domínios personalizados)
 const corsOptions = async (req, callback) => {
     const origin = req.headers['origin'];
+    // Log para debug de CORS
+    if (origin)
+        console.log('CORS Origin:', origin);
     // Permite requisições sem origin (ex: ferramentas internas, curl, etc)
     if (!origin)
         return callback(null, { origin: true, credentials: true, optionsSuccessStatus: 200 });
     // Permite todos os subdomínios e o domínio principal catalofacil.catalofacil.com.br
     if (origin.endsWith('.catalofacil.com.br') ||
         origin === 'https://catalofacil.catalofacil.com.br') {
-        return callback(null, { origin: true, credentials: true, optionsSuccessStatus: 200 });
+        return callback(null, { origin: 'https://catalofacil.catalofacil.com.br', credentials: true, optionsSuccessStatus: 200 });
     }
     // Permite o domínio principal
     if (origin === 'https://catalofacil.com.br')
-        return callback(null, { origin: true, credentials: true, optionsSuccessStatus: 200 });
+        return callback(null, { origin: 'https://catalofacil.com.br', credentials: true, optionsSuccessStatus: 200 });
     // Permite o frontend do Vercel
     if (origin === 'https://catalofacil-frontend.vercel.app')
-        return callback(null, { origin: true, credentials: true, optionsSuccessStatus: 200 });
+        return callback(null, { origin: 'https://catalofacil-frontend.vercel.app', credentials: true, optionsSuccessStatus: 200 });
     try {
         // Verifica se o domínio está cadastrado como slug na tabela Domain
         const slug = origin.replace('https://', '').replace('.catalofacil.com.br', '');
