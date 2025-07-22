@@ -81,8 +81,13 @@ const corsOptions: CorsOptionsDelegate<CorsRequest> = async (req, callback) => {
   // Permite o domínio principal
   if (origin === 'https://catalofacil.com.br') return callback(null, { origin: 'https://catalofacil.com.br', credentials: true, optionsSuccessStatus: 200 });
 
-  // Permite o frontend do Vercel
+  // Permite o frontend do Vercel (domínio principal e preview deployments)
   if (origin === 'https://catalofacil-frontend.vercel.app') return callback(null, { origin: 'https://catalofacil-frontend.vercel.app', credentials: true, optionsSuccessStatus: 200 });
+  
+  // Permite preview deployments do Vercel
+  if (origin && origin.includes('catalofacil-frontend') && origin.includes('vercel.app')) {
+    return callback(null, { origin: origin, credentials: true, optionsSuccessStatus: 200 });
+  }
 
   try {
     // Verifica se o domínio está cadastrado como slug na tabela Domain
