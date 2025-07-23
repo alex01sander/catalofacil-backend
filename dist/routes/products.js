@@ -59,7 +59,15 @@ router.post('/', auth_1.default, upload.single('image'), async (req, res) => {
 router.get('/', auth_1.default, async (req, res) => {
     try {
         const products = await prisma_1.default.products.findMany({
-            where: { is_active: true }
+            where: { is_active: true },
+            include: {
+                categories: {
+                    select: {
+                        id: true,
+                        name: true
+                    }
+                }
+            }
         });
         res.json(products);
     }
@@ -76,7 +84,15 @@ router.get('/:id', auth_1.default, async (req, res) => {
     }
     try {
         const product = await prisma_1.default.products.findUnique({
-            where: { id: req.params.id }
+            where: { id: req.params.id },
+            include: {
+                categories: {
+                    select: {
+                        id: true,
+                        name: true
+                    }
+                }
+            }
         });
         if (!product) {
             return res.status(404).json({ error: 'Produto não encontrado' });

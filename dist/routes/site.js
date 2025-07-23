@@ -59,7 +59,7 @@ router.get('/public/:slug/products', async (req, res) => {
     const loja = await prisma_1.default.stores.findUnique({ where: { slug }, select: { id: true } });
     if (!loja)
         return res.status(404).json({ error: 'Loja não encontrada' });
-    // Busca produtos ativos dessa loja
+    // Busca produtos ativos dessa loja com dados da categoria
     const produtos = await prisma_1.default.products.findMany({
         where: {
             store_id: loja.id,
@@ -72,6 +72,12 @@ router.get('/public/:slug/products', async (req, res) => {
             price: true,
             image: true,
             images: true,
+            categories: {
+                select: {
+                    id: true,
+                    name: true
+                }
+            }
             // Adicione outros campos públicos se necessário
         }
     });
