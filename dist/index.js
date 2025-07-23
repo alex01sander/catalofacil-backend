@@ -51,6 +51,11 @@ if (missingEnv.length > 0) {
 }
 // Configurações de segurança
 app.use((0, helmet_1.default)());
+// CORS fixo para liberar o frontend
+app.use(require('cors')({
+    origin: 'https://catalofacil.catalofacil.com.br',
+    credentials: true
+}));
 // Rate limiting
 const limiter = (0, express_rate_limit_1.default)({
     windowMs: 15 * 60 * 1000, // 15 minutos
