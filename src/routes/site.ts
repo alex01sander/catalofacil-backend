@@ -29,6 +29,7 @@ router.get('/public/:slug', async (req, res) => {
   const loja = await prisma.stores.findUnique({
     where: { slug },
     select: {
+      id: true, // Garante que o campo id está presente
       name: true,
       description: true,
       logo_url: true,
