@@ -86,6 +86,13 @@ const corsOptions: CorsOptionsDelegate<CorsRequest> = async (req, callback) => {
   
   // Permite preview deployments do Vercel
   if (origin && origin.includes('catalofacil-frontend') && origin.includes('vercel.app')) {
+    console.log('Permitindo acesso ao preview deployment do Vercel:', origin);
+    return callback(null, { origin: origin, credentials: true, optionsSuccessStatus: 200 });
+  }
+  
+  // Permite qualquer preview deployment do Vercel relacionado ao projeto
+  if (origin && origin.includes('-alex-brittos-projects.vercel.app')) {
+    console.log('Permitindo acesso ao preview deployment personalizado:', origin);
     return callback(null, { origin: origin, credentials: true, optionsSuccessStatus: 200 });
   }
 
