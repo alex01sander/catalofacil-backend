@@ -26,6 +26,7 @@ router.get('/public/:slug', async (req, res) => {
     return res.status(400).json({ error: 'Parâmetro inválido', details: parse.error.issues });
   }
   const { slug } = req.params;
+  console.log('[DEBUG] Slug recebido:', slug); // LOG
   const loja = await prisma.stores.findUnique({
     where: { slug },
     select: {
@@ -39,6 +40,7 @@ router.get('/public/:slug', async (req, res) => {
       theme_color: true
     }
   });
+  console.log('[DEBUG] Resultado da consulta loja:', loja); // LOG
   if (!loja) return res.status(404).json({ error: 'Loja não encontrada' });
   res.json(loja);
 });
