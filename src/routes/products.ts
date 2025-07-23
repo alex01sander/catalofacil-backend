@@ -57,6 +57,14 @@ router.post('/', authenticateJWT, upload.single('image'), async (req, res) => {
         images: imageUrl ? [imageUrl] : [],
         store_id: req.body.store_id, // O frontend deve enviar o store_id correto!
         // adicione outros campos obrigatórios aqui se necessário
+      },
+      include: {
+        categories: {
+          select: {
+            id: true,
+            name: true
+          }
+        }
       }
     });
     res.status(201).json(product);
@@ -123,15 +131,31 @@ router.put('/:id', authenticateJWT, async (req, res) => {
   if (!parse.success) {
     return res.status(400).json({ error: 'Parâmetro inválido', details: parse.error.issues });
   }
-  const parseBody = productsUpdateInputSchema.safeParse(req.body);
-  if (!parseBody.success) {
-    return res.status(400).json({ error: 'Dados inválidos', details: parseBody.error.issues });
-  }
   
   try {
+    // Prepara os dados para atualização, mapeando os campos corretos
+    const updateData: any = {};
+    
+    if (req.body.name !== undefined) updateData.name = req.body.name;
+    if (req.body.price !== undefined) updateData.price = parseFloat(req.body.price);
+    if (req.body.stock !== undefined) updateData.stock = parseInt(req.body.stock);
+    if (req.body.description !== undefined) updateData.description = req.body.description;
+    if (req.body.category !== undefined) updateData.category_id = req.body.category || null;
+    if (req.body.isActive !== undefined) updateData.is_active = req.body.isActive;
+    if (req.body.image !== undefined) updateData.image = req.body.image;
+    if (req.body.images !== undefined) updateData.images = req.body.images;
+    
     const product = await prisma.products.update({
       where: { id: req.params.id },
-      data: parseBody.data
+      data: updateData,
+      include: {
+        categories: {
+          select: {
+            id: true,
+            name: true
+          }
+        }
+      }
     });
     res.json(product);
   } catch (error) {

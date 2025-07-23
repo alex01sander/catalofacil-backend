@@ -6,13 +6,12 @@ Object.defineProperty(exports, "__esModule", { value: true });
 // src/routes/products.ts
 const express_1 = require("express");
 const auth_1 = __importDefault(require("../middleware/auth"));
-const zod_1 = require("../zod");
-const zod_2 = require("zod");
+const zod_1 = require("zod");
 const prisma_1 = __importDefault(require("../lib/prisma"));
 const multer_1 = __importDefault(require("multer"));
 const supabase_1 = __importDefault(require("../lib/supabase"));
 const router = (0, express_1.Router)();
-const idParamSchema = zod_2.z.object({ id: zod_2.z.string().min(1, 'ID obrigatório') });
+const idParamSchema = zod_1.z.object({ id: zod_1.z.string().min(1, 'ID obrigatório') });
 const upload = (0, multer_1.default)({ storage: multer_1.default.memoryStorage() });
 // Criar produto com upload de imagem
 router.post('/', auth_1.default, upload.single('image'), async (req, res) => {
@@ -46,6 +45,14 @@ router.post('/', auth_1.default, upload.single('image'), async (req, res) => {
                 images: imageUrl ? [imageUrl] : [],
                 store_id: req.body.store_id, // O frontend deve enviar o store_id correto!
                 // adicione outros campos obrigatórios aqui se necessário
+            },
+            include: {
+                categories: {
+                    select: {
+                        id: true,
+                        name: true
+                    }
+                }
             }
         });
         res.status(201).json(product);
@@ -110,14 +117,36 @@ router.put('/:id', auth_1.default, async (req, res) => {
     if (!parse.success) {
         return res.status(400).json({ error: 'Parâmetro inválido', details: parse.error.issues });
     }
-    const parseBody = zod_1.productsUpdateInputSchema.safeParse(req.body);
-    if (!parseBody.success) {
-        return res.status(400).json({ error: 'Dados inválidos', details: parseBody.error.issues });
-    }
     try {
+        // Prepara os dados para atualização, mapeando os campos corretos
+        const updateData = {};
+        if (req.body.name !== undefined)
+            updateData.name = req.body.name;
+        if (req.body.price !== undefined)
+            updateData.price = parseFloat(req.body.price);
+        if (req.body.stock !== undefined)
+            updateData.stock = parseInt(req.body.stock);
+        if (req.body.description !== undefined)
+            updateData.description = req.body.description;
+        if (req.body.category !== undefined)
+            updateData.category_id = req.body.category || null;
+        if (req.body.isActive !== undefined)
+            updateData.is_active = req.body.isActive;
+        if (req.body.image !== undefined)
+            updateData.image = req.body.image;
+        if (req.body.images !== undefined)
+            updateData.images = req.body.images;
         const product = await prisma_1.default.products.update({
             where: { id: req.params.id },
-            data: parseBody.data
+            data: updateData,
+            include: {
+                categories: {
+                    select: {
+                        id: true,
+                        name: true
+                    }
+                }
+            }
         });
         res.json(product);
     }
