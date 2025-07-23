@@ -70,7 +70,15 @@ router.post('/', authenticateJWT, upload.single('image'), async (req, res) => {
 router.get('/', authenticateJWT, async (req, res) => {
   try {
     const products = await prisma.products.findMany({
-      where: { is_active: true }
+      where: { is_active: true },
+      include: {
+        categories: {
+          select: {
+            id: true,
+            name: true
+          }
+        }
+      }
     });
     res.json(products);
   } catch (error) {
@@ -87,7 +95,15 @@ router.get('/:id', authenticateJWT, async (req, res) => {
   }
   try {
     const product = await prisma.products.findUnique({
-      where: { id: req.params.id }
+      where: { id: req.params.id },
+      include: {
+        categories: {
+          select: {
+            id: true,
+            name: true
+          }
+        }
+      }
     });
     
     if (!product) {
