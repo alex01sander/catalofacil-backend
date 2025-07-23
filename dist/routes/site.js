@@ -29,9 +29,11 @@ router.get('/public/:slug', async (req, res) => {
         return res.status(400).json({ error: 'Parâmetro inválido', details: parse.error.issues });
     }
     const { slug } = req.params;
+    console.log('[DEBUG] Slug recebido:', slug); // LOG
     const loja = await prisma_1.default.stores.findUnique({
         where: { slug },
         select: {
+            id: true, // Garante que o campo id está presente
             name: true,
             description: true,
             logo_url: true,
@@ -41,6 +43,7 @@ router.get('/public/:slug', async (req, res) => {
             theme_color: true
         }
     });
+    console.log('[DEBUG] Resultado da consulta loja:', loja); // LOG
     if (!loja)
         return res.status(404).json({ error: 'Loja não encontrada' });
     res.json(loja);
@@ -97,5 +100,10 @@ router.get('/public/:slug/categories', async (req, res) => {
         }
     });
     res.json(categorias);
+});
+// Rota de teste para depuração
+router.get('/public/teste', (req, res) => {
+    console.log('[DEBUG] Rota de teste acessada');
+    res.json({ ok: true, mensagem: 'Rota de teste funcionando!' });
 });
 exports.default = router;

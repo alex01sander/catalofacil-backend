@@ -12,7 +12,12 @@ const idParamSchema = zod_1.z.object({ id: zod_1.z.string().min(1, 'ID obrigató
 // Listar todas as lojas
 router.get('/', auth_1.default, async (req, res) => {
     const lojas = await prisma_1.default.stores.findMany({ include: { categories: true, customers: true, orders: true, products: true, sales: true } });
-    res.json(lojas);
+    // Garante que o campo id está presente explicitamente em cada loja, sem sobrescrever
+    const lojasComId = lojas.map(loja => ({
+        ...loja,
+        id: loja.id
+    }));
+    res.json(lojasComId);
 });
 // Buscar loja por ID
 router.get('/:id', auth_1.default, async (req, res) => {

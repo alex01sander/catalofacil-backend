@@ -11,8 +11,8 @@ router.get('/', authenticateJWT, async (req, res) => {
     // Busca única por user_id
     const settings = await prisma.store_settings.findUnique({ where: { user_id: String(user_id) } });
     if (!settings) return res.json(settings);
-    // Garante que o campo id está presente
-    return res.json({ id: settings.id, ...settings });
+    // Garante que o campo id está presente, sem sobrescrever
+    return res.json({ ...settings, id: settings.id });
   }
   const settings = await prisma.store_settings.findMany({ include: { users: true } });
   res.json(settings);
