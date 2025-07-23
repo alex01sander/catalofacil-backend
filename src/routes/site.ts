@@ -98,4 +98,10 @@ router.get('/public/:slug/categories', async (req, res) => {
   res.json(categorias);
 });
 
+// Rota de teste para depuração
+router.get('/public/teste', (req, res) => {
+  console.log('[DEBUG] Rota de teste acessada');
+  res.json({ ok: true, mensagem: 'Rota de teste funcionando!' });
+});
+
 export default router; 
