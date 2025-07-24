@@ -1,6 +1,9 @@
 // src/routes/products.ts
 import { Router } from 'express';
 import authenticateJWT from '../middleware/auth';
+import { userRateLimit, uploadRateLimit } from '../middleware/rateLimiter';
+import { paginationMiddleware, paginationHeaders, createPaginatedResponse, getPrismaQuery } from '../middleware/pagination';
+import { cacheMiddleware, clearUserCache, generateCacheKey } from '../lib/cache';
 import { productsCreateInputSchema, productsUpdateInputSchema } from '../zod';
 import { z } from 'zod';
 import prisma from '../lib/prisma';
@@ -44,7 +47,7 @@ if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) {
 }
 
 // Criar produto com upload de imagem
-router.post('/', authenticateJWT, upload.single('image'), async (req, res) => {
+router.post('/', authenticateJWT, uploadRateLimit, upload.single('image'), async (req, res) => {
   if (!req.user) return res.status(401).json({ error: 'Usuário não autenticado' });
 
   try {
@@ -186,25 +189,10 @@ router.post('/', authenticateJWT, upload.single('image'), async (req, res) => {
       }
     });
     
-    console.log('Produto criado com sucesso:');
-    console.log('- ID:', product.id);
-    console.log('- Nome:', product.name);
-    console.log('- Preço:', product.price);
-    console.log('- Categoria ID:', product.category_id);
-    console.log('- Imagem URL:', product.image);
-    console.log('- Images Array:', product.images);
-    console.log('- Store ID:', product.store_id);
-    console.log('- Is Active:', product.is_active);
+    console.log('✅ Produto criado:', product.name);
     
-    // Verificar se o produto aparecerá na vitrine
-    if (product.store_id && product.is_active) {
-      console.log('✅ Produto deve aparecer na vitrine pública (tem store_id e is_active)');
-    } else {
-      console.log('❌ Produto NÃO aparecerá na vitrine:', {
-        tem_store_id: !!product.store_id,
-        is_active: product.is_active
-      });
-    }
+    // Limpar cache do usuário após criar produto
+    clearUserCache(req.user.id);
     
     res.status(201).json(product);
   } catch (error) {
@@ -213,33 +201,73 @@ router.post('/', authenticateJWT, upload.single('image'), async (req, res) => {
   }
 });
 
-// Listar produtos do usuário
-router.get('/', authenticateJWT, async (req, res) => {
-  if (!req.user) return res.status(401).json({ error: 'Usuário não autenticado' });
-  
-  try {
-    const products = await prisma.products.findMany({
-      where: { 
-        user_id: req.user.id 
-      },
-      include: {
-        categories: {
-          select: {
-            id: true,
-            name: true,
-            color: true
-          }
-        }
-      },
-      orderBy: {
-        created_at: 'desc'
+// Listar produtos do usuário com cache e paginação
+router.get('/', 
+  authenticateJWT, 
+  userRateLimit,
+  paginationMiddleware,
+  paginationHeaders,
+  cacheMiddleware(180, (req) => generateCacheKey('products', req.user.id, {
+    page: req.pagination?.page,
+    limit: req.pagination?.limit,
+    sortBy: req.pagination?.sortBy,
+    sortOrder: req.pagination?.sortOrder,
+    search: req.query.search,
+    category: req.query.category,
+    active: req.query.active
+  })),
+  async (req, res) => {
+    if (!req.user) return res.status(401).json({ error: 'Usuário não autenticado' });
+    
+    try {
+      // Construir filtros
+      const where: any = { user_id: req.user.id };
+      
+      // Filtro por busca de texto
+      if (req.query.search) {
+        where.OR = [
+          { name: { contains: req.query.search as string, mode: 'insensitive' } },
+          { description: { contains: req.query.search as string, mode: 'insensitive' } }
+        ];
       }
-    });
-    res.json(products);
-  } catch (error) {
-    console.error('Erro ao listar produtos:', error);
-    res.status(500).json({ error: 'Erro interno do servidor' });
-  }
+      
+      // Filtro por categoria
+      if (req.query.category) {
+        where.category_id = req.query.category as string;
+      }
+      
+      // Filtro por status ativo
+      if (req.query.active !== undefined) {
+        where.is_active = req.query.active === 'true';
+      }
+      
+      // Query com paginação
+      const paginationQuery = getPrismaQuery(req.pagination!, 'created_at');
+      
+      // Buscar produtos e contagem total em paralelo
+      const [products, totalCount] = await Promise.all([
+        prisma.products.findMany({
+          where,
+          include: {
+            categories: {
+              select: {
+                id: true,
+                name: true,
+                color: true
+              }
+            }
+          },
+          ...paginationQuery
+        }),
+        prisma.products.count({ where })
+      ]);
+      
+      const response = createPaginatedResponse(products, totalCount, req.pagination!);
+      res.json(response);
+    } catch (error) {
+      console.error('Erro ao listar produtos:', error);
+      res.status(500).json({ error: 'Erro interno do servidor' });
+    }
 });
 
 // Buscar produto por ID
@@ -282,7 +310,7 @@ router.get('/:id', authenticateJWT, async (req, res) => {
 });
 
 // Atualizar produto
-router.put('/:id', authenticateJWT, async (req, res) => {
+router.put('/:id', authenticateJWT, userRateLimit, async (req, res) => {
   if (!req.user) return res.status(401).json({ error: 'Usuário não autenticado' });
   
   const parse = idParamSchema.safeParse(req.params);
@@ -346,7 +374,11 @@ router.put('/:id', authenticateJWT, async (req, res) => {
       }
     });
     
-    console.log('Produto atualizado:', product);
+    console.log('✅ Produto atualizado:', product.name);
+    
+    // Limpar cache do usuário após atualizar produto
+    clearUserCache(req.user.id);
+    
     res.json(product);
   } catch (error) {
     console.error('Erro ao atualizar produto:', error);
@@ -355,15 +387,38 @@ router.put('/:id', authenticateJWT, async (req, res) => {
 });
 
 // Deletar produto
-router.delete('/:id', authenticateJWT, async (req, res) => {
+router.delete('/:id', authenticateJWT, userRateLimit, async (req, res) => {
+  if (!req.user) return res.status(401).json({ error: 'Usuário não autenticado' });
+  
   const parse = idParamSchema.safeParse(req.params);
   if (!parse.success) {
     return res.status(400).json({ error: 'Parâmetro inválido', details: parse.error.issues });
   }
+  
   try {
+    // Verificar se o produto pertence ao usuário antes de deletar
+    const existingProduct = await prisma.products.findUnique({
+      where: { id: req.params.id },
+      select: { user_id: true, name: true }
+    });
+    
+    if (!existingProduct) {
+      return res.status(404).json({ error: 'Produto não encontrado' });
+    }
+    
+    if (existingProduct.user_id !== req.user.id) {
+      return res.status(403).json({ error: 'Produto não pertence ao usuário' });
+    }
+    
     await prisma.products.delete({
       where: { id: req.params.id }
     });
+    
+    console.log('✅ Produto deletado:', existingProduct.name);
+    
+    // Limpar cache do usuário após deletar produto
+    clearUserCache(req.user.id);
+    
     res.status(204).send();
   } catch (error) {
     console.error('Erro ao deletar produto:', error);

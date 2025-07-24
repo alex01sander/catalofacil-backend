@@ -36,6 +36,10 @@ import creditAccountsRouter from './routes/creditAccounts';
 import creditTransactionsRouter from './routes/creditTransactions';
 import customersRouter from './routes/customers';
 
+// Importar middlewares de otimização
+import { basicRateLimit, apiSlowDown, authRateLimit } from './middleware/rateLimiter';
+import { getCacheStats } from './lib/cache';
+
 import type { CorsOptionsDelegate, CorsRequest } from 'cors';
 
 const app = express();
@@ -54,13 +58,9 @@ if (missingEnv.length > 0) {
 // Configurações de segurança
 app.use(helmet());
 
-// Rate limiting
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutos
-  max: 100, // limite de 100 requests por IP
-  message: 'Muitas requisições deste IP, tente novamente mais tarde.'
-});
-app.use(limiter);
+// Rate limiting otimizado
+app.use(basicRateLimit);
+app.use(apiSlowDown);
 
 // CORS dinâmico para multi-tenant (subdomínios e domínios personalizados)
 const corsOptions: CorsOptionsDelegate<CorsRequest> = async (req, callback) => {
@@ -131,12 +131,22 @@ app.get('/', (req: Request, res: Response) => {
   });
 });
 
-// Rota de health check para Railway
+// Rota de health check otimizada
 app.get('/health', (req: Request, res: Response) => {
   res.json({ 
     status: 'ok',
     timestamp: new Date().toISOString(),
-    uptime: process.uptime()
+    uptime: process.uptime(),
+    cache: getCacheStats()
+  });
+});
+
+// Endpoint para estatísticas do cache
+app.get('/cache-stats', basicRateLimit, (req: Request, res: Response) => {
+  const stats = getCacheStats();
+  res.json({
+    ...stats,
+    timestamp: new Date().toISOString()
   });
 });
 
@@ -151,7 +161,7 @@ app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
   }
 });
 
-app.use('/auth', authRouter);
+app.use('/auth', authRateLimit, authRouter);
 app.use('/products', productsRouter);
 app.use('/site', siteRouter);
 app.use('/domain', domainRouter);

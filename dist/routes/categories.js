@@ -7,17 +7,40 @@ const express_1 = require("express");
 const prisma_1 = __importDefault(require("../lib/prisma"));
 const zod_1 = require("../zod");
 const auth_1 = __importDefault(require("../middleware/auth"));
+const rateLimiter_1 = require("../middleware/rateLimiter");
+const cache_1 = require("../lib/cache");
 const zod_2 = require("zod");
 const router = (0, express_1.Router)();
 const idParamSchema = zod_2.z.object({ id: zod_2.z.string().min(1, 'ID obrigatório') });
-// Listar categorias do usuário
-router.get('/', auth_1.default, async (req, res) => {
+// Listar categorias do usuário com cache otimizado
+router.get('/', auth_1.default, rateLimiter_1.userRateLimit, (0, cache_1.cacheMiddleware)(600, (req) => (0, cache_1.generateCacheKey)('categories', req.user.id, {
+    includeProducts: req.query.includeProducts
+})), async (req, res) => {
     if (!req.user)
         return res.status(401).json({ error: 'Usuário não autenticado' });
     try {
+        // Include otimizado - só incluir produtos se solicitado
+        const includeProducts = req.query.includeProducts === 'true';
         const categorias = await prisma_1.default.categories.findMany({
             where: { user_id: req.user.id },
-            include: { products: true, stores: true, users: true },
+            include: {
+                products: includeProducts ? {
+                    select: {
+                        id: true,
+                        name: true,
+                        price: true,
+                        is_active: true,
+                        image: true
+                    }
+                } : false,
+                stores: {
+                    select: {
+                        id: true,
+                        name: true,
+                        slug: true
+                    }
+                }
+            },
             orderBy: { name: 'asc' }
         });
         res.json(categorias);
@@ -53,7 +76,7 @@ router.get('/:id', auth_1.default, async (req, res) => {
     }
 });
 // Criar categoria
-router.post('/', auth_1.default, async (req, res) => {
+router.post('/', auth_1.default, rateLimiter_1.userRateLimit, async (req, res) => {
     const parse = zod_1.categoriesCreateInputSchema.safeParse(req.body);
     if (!parse.success) {
         return res.status(400).json({ error: 'Dados inválidos', details: parse.error.issues });
@@ -69,6 +92,8 @@ router.post('/', auth_1.default, async (req, res) => {
             store_id: req.body.store_id // O frontend deve enviar o store_id correto!
         };
         const nova = await prisma_1.default.categories.create({ data });
+        // Limpar cache do usuário após criar categoria
+        (0, cache_1.clearUserCache)(req.user.id);
         res.status(201).json(nova);
     }
     catch (e) {

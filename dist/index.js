@@ -7,7 +7,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
 const helmet_1 = __importDefault(require("helmet"));
-const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
 const prisma_1 = __importDefault(require("./lib/prisma"));
 const products_1 = __importDefault(require("./routes/products"));
 const auth_1 = __importDefault(require("./routes/auth"));
@@ -39,6 +38,9 @@ const cashFlow_1 = __importDefault(require("./routes/cashFlow"));
 const creditAccounts_1 = __importDefault(require("./routes/creditAccounts"));
 const creditTransactions_1 = __importDefault(require("./routes/creditTransactions"));
 const customers_1 = __importDefault(require("./routes/customers"));
+// Importar middlewares de otimização
+const rateLimiter_1 = require("./middleware/rateLimiter");
+const cache_1 = require("./lib/cache");
 const app = (0, express_1.default)();
 // Configuração para confiar no proxy do Render/Vercel
 app.set('trust proxy', 1);
@@ -51,13 +53,9 @@ if (missingEnv.length > 0) {
 }
 // Configurações de segurança
 app.use((0, helmet_1.default)());
-// Rate limiting
-const limiter = (0, express_rate_limit_1.default)({
-    windowMs: 15 * 60 * 1000, // 15 minutos
-    max: 100, // limite de 100 requests por IP
-    message: 'Muitas requisições deste IP, tente novamente mais tarde.'
-});
-app.use(limiter);
+// Rate limiting otimizado
+app.use(rateLimiter_1.basicRateLimit);
+app.use(rateLimiter_1.apiSlowDown);
 // CORS dinâmico para multi-tenant (subdomínios e domínios personalizados)
 const corsOptions = async (req, callback) => {
     const origin = req.headers['origin'];
@@ -118,12 +116,21 @@ app.get('/', (req, res) => {
         timestamp: new Date().toISOString()
     });
 });
-// Rota de health check para Railway
+// Rota de health check otimizada
 app.get('/health', (req, res) => {
     res.json({
         status: 'ok',
         timestamp: new Date().toISOString(),
-        uptime: process.uptime()
+        uptime: process.uptime(),
+        cache: (0, cache_1.getCacheStats)()
+    });
+});
+// Endpoint para estatísticas do cache
+app.get('/cache-stats', rateLimiter_1.basicRateLimit, (req, res) => {
+    const stats = (0, cache_1.getCacheStats)();
+    res.json({
+        ...stats,
+        timestamp: new Date().toISOString()
     });
 });
 // Middleware de tratamento de erros
@@ -136,7 +143,7 @@ app.use((err, req, res, next) => {
         res.status(500).json({ error: err.message, stack: err.stack });
     }
 });
-app.use('/auth', auth_1.default);
+app.use('/auth', rateLimiter_1.authRateLimit, auth_1.default);
 app.use('/products', products_1.default);
 app.use('/site', site_1.default);
 app.use('/domain', domain_1.default);

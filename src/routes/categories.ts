@@ -2,26 +2,54 @@ import { Router } from 'express';
 import prisma from '../lib/prisma';
 import { categoriesCreateInputSchema, categoriesUpdateInputSchema } from '../zod';
 import authenticateJWT from '../middleware/auth';
+import { userRateLimit } from '../middleware/rateLimiter';
+import { cacheMiddleware, clearUserCache, generateCacheKey } from '../lib/cache';
 import { z } from 'zod';
 
 const router = Router();
 const idParamSchema = z.object({ id: z.string().min(1, 'ID obrigatório') });
 
-// Listar categorias do usuário
-router.get('/', authenticateJWT, async (req, res) => {
-  if (!req.user) return res.status(401).json({ error: 'Usuário não autenticado' });
-  
-  try {
-    const categorias = await prisma.categories.findMany({ 
-      where: { user_id: req.user.id },
-      include: { products: true, stores: true, users: true },
-      orderBy: { name: 'asc' }
-    });
-    res.json(categorias);
-  } catch (error) {
-    console.error('Erro ao listar categorias:', error);
-    res.status(500).json({ error: 'Erro interno do servidor' });
-  }
+// Listar categorias do usuário com cache otimizado
+router.get('/', 
+  authenticateJWT, 
+  userRateLimit,
+  cacheMiddleware(600, (req) => generateCacheKey('categories', req.user.id, {
+    includeProducts: req.query.includeProducts
+  })),
+  async (req, res) => {
+    if (!req.user) return res.status(401).json({ error: 'Usuário não autenticado' });
+    
+    try {
+      // Include otimizado - só incluir produtos se solicitado
+      const includeProducts = req.query.includeProducts === 'true';
+      
+      const categorias = await prisma.categories.findMany({ 
+        where: { user_id: req.user.id },
+        include: { 
+          products: includeProducts ? {
+            select: {
+              id: true,
+              name: true,
+              price: true,
+              is_active: true,
+              image: true
+            }
+          } : false,
+          stores: {
+            select: {
+              id: true,
+              name: true,
+              slug: true
+            }
+          }
+        },
+        orderBy: { name: 'asc' }
+      });
+      res.json(categorias);
+    } catch (error) {
+      console.error('Erro ao listar categorias:', error);
+      res.status(500).json({ error: 'Erro interno do servidor' });
+    }
 });
 
 // Buscar categoria por ID (do usuário)
@@ -51,7 +79,7 @@ router.get('/:id', authenticateJWT, async (req, res) => {
 });
 
 // Criar categoria
-router.post('/', authenticateJWT, async (req, res) => {
+router.post('/', authenticateJWT, userRateLimit, async (req, res) => {
   const parse = categoriesCreateInputSchema.safeParse(req.body);
   if (!parse.success) {
     return res.status(400).json({ error: 'Dados inválidos', details: parse.error.issues });
@@ -69,6 +97,10 @@ router.post('/', authenticateJWT, async (req, res) => {
     };
     
     const nova = await prisma.categories.create({ data });
+    
+    // Limpar cache do usuário após criar categoria
+    clearUserCache(req.user.id);
+    
     res.status(201).json(nova);
   } catch (e) {
     console.error('Erro ao criar categoria:', e);

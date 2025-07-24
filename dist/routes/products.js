@@ -6,6 +6,9 @@ Object.defineProperty(exports, "__esModule", { value: true });
 // src/routes/products.ts
 const express_1 = require("express");
 const auth_1 = __importDefault(require("../middleware/auth"));
+const rateLimiter_1 = require("../middleware/rateLimiter");
+const pagination_1 = require("../middleware/pagination");
+const cache_1 = require("../lib/cache");
 const zod_1 = require("zod");
 const prisma_1 = __importDefault(require("../lib/prisma"));
 const multer_1 = __importDefault(require("multer"));
@@ -33,7 +36,7 @@ if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) {
     console.error('⚠️ AVISO: Variáveis SUPABASE_URL ou SUPABASE_SERVICE_KEY não configuradas');
 }
 // Criar produto com upload de imagem
-router.post('/', auth_1.default, upload.single('image'), async (req, res) => {
+router.post('/', auth_1.default, rateLimiter_1.uploadRateLimit, upload.single('image'), async (req, res) => {
     if (!req.user)
         return res.status(401).json({ error: 'Usuário não autenticado' });
     try {
@@ -163,25 +166,9 @@ router.post('/', auth_1.default, upload.single('image'), async (req, res) => {
                 }
             }
         });
-        console.log('Produto criado com sucesso:');
-        console.log('- ID:', product.id);
-        console.log('- Nome:', product.name);
-        console.log('- Preço:', product.price);
-        console.log('- Categoria ID:', product.category_id);
-        console.log('- Imagem URL:', product.image);
-        console.log('- Images Array:', product.images);
-        console.log('- Store ID:', product.store_id);
-        console.log('- Is Active:', product.is_active);
-        // Verificar se o produto aparecerá na vitrine
-        if (product.store_id && product.is_active) {
-            console.log('✅ Produto deve aparecer na vitrine pública (tem store_id e is_active)');
-        }
-        else {
-            console.log('❌ Produto NÃO aparecerá na vitrine:', {
-                tem_store_id: !!product.store_id,
-                is_active: product.is_active
-            });
-        }
+        console.log('✅ Produto criado:', product.name);
+        // Limpar cache do usuário após criar produto
+        (0, cache_1.clearUserCache)(req.user.id);
         res.status(201).json(product);
     }
     catch (error) {
@@ -189,29 +176,57 @@ router.post('/', auth_1.default, upload.single('image'), async (req, res) => {
         res.status(500).json({ error: 'Erro interno do servidor', details: error });
     }
 });
-// Listar produtos do usuário
-router.get('/', auth_1.default, async (req, res) => {
+// Listar produtos do usuário com cache e paginação
+router.get('/', auth_1.default, rateLimiter_1.userRateLimit, pagination_1.paginationMiddleware, pagination_1.paginationHeaders, (0, cache_1.cacheMiddleware)(180, (req) => (0, cache_1.generateCacheKey)('products', req.user.id, {
+    page: req.pagination?.page,
+    limit: req.pagination?.limit,
+    sortBy: req.pagination?.sortBy,
+    sortOrder: req.pagination?.sortOrder,
+    search: req.query.search,
+    category: req.query.category,
+    active: req.query.active
+})), async (req, res) => {
     if (!req.user)
         return res.status(401).json({ error: 'Usuário não autenticado' });
     try {
-        const products = await prisma_1.default.products.findMany({
-            where: {
-                user_id: req.user.id
-            },
-            include: {
-                categories: {
-                    select: {
-                        id: true,
-                        name: true,
-                        color: true
+        // Construir filtros
+        const where = { user_id: req.user.id };
+        // Filtro por busca de texto
+        if (req.query.search) {
+            where.OR = [
+                { name: { contains: req.query.search, mode: 'insensitive' } },
+                { description: { contains: req.query.search, mode: 'insensitive' } }
+            ];
+        }
+        // Filtro por categoria
+        if (req.query.category) {
+            where.category_id = req.query.category;
+        }
+        // Filtro por status ativo
+        if (req.query.active !== undefined) {
+            where.is_active = req.query.active === 'true';
+        }
+        // Query com paginação
+        const paginationQuery = (0, pagination_1.getPrismaQuery)(req.pagination, 'created_at');
+        // Buscar produtos e contagem total em paralelo
+        const [products, totalCount] = await Promise.all([
+            prisma_1.default.products.findMany({
+                where,
+                include: {
+                    categories: {
+                        select: {
+                            id: true,
+                            name: true,
+                            color: true
+                        }
                     }
-                }
-            },
-            orderBy: {
-                created_at: 'desc'
-            }
-        });
-        res.json(products);
+                },
+                ...paginationQuery
+            }),
+            prisma_1.default.products.count({ where })
+        ]);
+        const response = (0, pagination_1.createPaginatedResponse)(products, totalCount, req.pagination);
+        res.json(response);
     }
     catch (error) {
         console.error('Erro ao listar produtos:', error);
@@ -254,7 +269,7 @@ router.get('/:id', auth_1.default, async (req, res) => {
     }
 });
 // Atualizar produto
-router.put('/:id', auth_1.default, async (req, res) => {
+router.put('/:id', auth_1.default, rateLimiter_1.userRateLimit, async (req, res) => {
     if (!req.user)
         return res.status(401).json({ error: 'Usuário não autenticado' });
     const parse = idParamSchema.safeParse(req.params);
@@ -318,7 +333,9 @@ router.put('/:id', auth_1.default, async (req, res) => {
                 }
             }
         });
-        console.log('Produto atualizado:', product);
+        console.log('✅ Produto atualizado:', product.name);
+        // Limpar cache do usuário após atualizar produto
+        (0, cache_1.clearUserCache)(req.user.id);
         res.json(product);
     }
     catch (error) {
@@ -327,15 +344,31 @@ router.put('/:id', auth_1.default, async (req, res) => {
     }
 });
 // Deletar produto
-router.delete('/:id', auth_1.default, async (req, res) => {
+router.delete('/:id', auth_1.default, rateLimiter_1.userRateLimit, async (req, res) => {
+    if (!req.user)
+        return res.status(401).json({ error: 'Usuário não autenticado' });
     const parse = idParamSchema.safeParse(req.params);
     if (!parse.success) {
         return res.status(400).json({ error: 'Parâmetro inválido', details: parse.error.issues });
     }
     try {
+        // Verificar se o produto pertence ao usuário antes de deletar
+        const existingProduct = await prisma_1.default.products.findUnique({
+            where: { id: req.params.id },
+            select: { user_id: true, name: true }
+        });
+        if (!existingProduct) {
+            return res.status(404).json({ error: 'Produto não encontrado' });
+        }
+        if (existingProduct.user_id !== req.user.id) {
+            return res.status(403).json({ error: 'Produto não pertence ao usuário' });
+        }
         await prisma_1.default.products.delete({
             where: { id: req.params.id }
         });
+        console.log('✅ Produto deletado:', existingProduct.name);
+        // Limpar cache do usuário após deletar produto
+        (0, cache_1.clearUserCache)(req.user.id);
         res.status(204).send();
     }
     catch (error) {
