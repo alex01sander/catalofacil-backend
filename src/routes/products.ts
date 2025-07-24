@@ -49,13 +49,35 @@ router.post('/', authenticateJWT, upload.single('image'), async (req, res) => {
 
   try {
     let imageUrl = null;
+    
+    console.log('=== DEBUG UPLOAD IMAGEM ===');
+    console.log('Arquivo recebido:', !!req.file);
+    
     if (req.file) {
+      console.log('Detalhes do arquivo:', {
+        originalname: req.file.originalname,
+        mimetype: req.file.mimetype,
+        size: req.file.size
+      });
+      
+      // Verificar configuração Supabase
+      if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) {
+        console.error('ERRO: Variáveis Supabase não configuradas');
+        return res.status(500).json({ 
+          error: 'Configuração de upload não encontrada',
+          details: {
+            hasUrl: !!process.env.SUPABASE_URL,
+            hasKey: !!process.env.SUPABASE_SERVICE_KEY
+          }
+        });
+      }
+      
       // Upload para Supabase
       const fileExt = req.file.originalname.split('.').pop();
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${fileExt}`;
       
       console.log('Fazendo upload do arquivo:', fileName);
-      console.log('Tamanho do arquivo:', req.file.size);
+      console.log('Bucket: products');
       
       const { data, error } = await supabase.storage
         .from('products')
@@ -66,8 +88,18 @@ router.post('/', authenticateJWT, upload.single('image'), async (req, res) => {
         
       if (error) {
         console.error('Erro no upload Supabase:', error);
-        return res.status(500).json({ error: 'Erro ao fazer upload da imagem', details: error.message });
+        return res.status(500).json({ 
+          error: 'Erro ao fazer upload da imagem', 
+          details: error.message,
+          supabaseInfo: {
+            bucket: 'products',
+            fileName: fileName,
+            fileSize: req.file.size
+          }
+        });
       }
+      
+      console.log('Upload bem-sucedido:', data);
       
       // Gerar URL pública
       const { data: urlData } = supabase.storage
@@ -76,11 +108,26 @@ router.post('/', authenticateJWT, upload.single('image'), async (req, res) => {
         
       imageUrl = urlData.publicUrl;
       console.log('URL da imagem gerada:', imageUrl);
+      
+      // Verificar se a URL está válida
+      if (!imageUrl || !imageUrl.startsWith('http')) {
+        console.error('URL inválida gerada:', imageUrl);
+        return res.status(500).json({ 
+          error: 'URL de imagem inválida',
+          details: { generatedUrl: imageUrl }
+        });
+      }
+    } else {
+      console.log('Nenhum arquivo de imagem enviado');
     }
 
+    console.log('Dados recebidos para criação:', req.body);
+    console.log('ImageUrl final:', imageUrl);
+    
     const product = await prisma.products.create({
       data: {
         name: req.body.name,
+        price: parseFloat(req.body.price) || 0,
         stock: parseInt(req.body.stock) || 0,
         is_active: req.body.isActive !== undefined ? req.body.isActive : true,
         user_id: req.user.id,
