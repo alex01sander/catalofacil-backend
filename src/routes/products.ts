@@ -22,7 +22,26 @@ const router = Router();
 
 const idParamSchema = z.object({ id: z.string().min(1, 'ID obrigatório') });
 
-const upload = multer({ storage: multer.memoryStorage() });
+// Configuração do multer para upload
+const upload = multer({ 
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB limite
+  },
+  fileFilter: (req, file, cb) => {
+    // Verificar se é uma imagem
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Apenas arquivos de imagem são permitidos'));
+    }
+  }
+});
+
+// Validar configuração do Supabase
+if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) {
+  console.error('⚠️ AVISO: Variáveis SUPABASE_URL ou SUPABASE_SERVICE_KEY não configuradas');
+}
 
 // Criar produto com upload de imagem
 router.post('/', authenticateJWT, upload.single('image'), async (req, res) => {
@@ -34,39 +53,57 @@ router.post('/', authenticateJWT, upload.single('image'), async (req, res) => {
       // Upload para Supabase
       const fileExt = req.file.originalname.split('.').pop();
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${fileExt}`;
-      const { data, error } = await supabase.storage.from('products').upload(fileName, req.file.buffer, {
-        contentType: req.file.mimetype
-      });
+      
+      console.log('Fazendo upload do arquivo:', fileName);
+      console.log('Tamanho do arquivo:', req.file.size);
+      
+      const { data, error } = await supabase.storage
+        .from('products')
+        .upload(fileName, req.file.buffer, {
+          contentType: req.file.mimetype,
+          upsert: false
+        });
+        
       if (error) {
+        console.error('Erro no upload Supabase:', error);
         return res.status(500).json({ error: 'Erro ao fazer upload da imagem', details: error.message });
       }
-      // Monta a URL pública
-      imageUrl = `${process.env.SUPABASE_URL}/storage/v1/object/public/products/${fileName}`;
+      
+      // Gerar URL pública
+      const { data: urlData } = supabase.storage
+        .from('products')
+        .getPublicUrl(fileName);
+        
+      imageUrl = urlData.publicUrl;
+      console.log('URL da imagem gerada:', imageUrl);
     }
 
     const product = await prisma.products.create({
       data: {
         name: req.body.name,
-        price: req.body.price,
-        stock: req.body.stock,
-        is_active: req.body.isActive,
+        stock: parseInt(req.body.stock) || 0,
+        is_active: req.body.isActive !== undefined ? req.body.isActive : true,
         user_id: req.user.id,
-        category_id: req.body.category || null,
+        category_id: req.body.category || req.body.categoryId || null,
         description: req.body.description || null,
         image: imageUrl,
         images: imageUrl ? [imageUrl] : [],
-        store_id: req.body.store_id, // O frontend deve enviar o store_id correto!
-        // adicione outros campos obrigatórios aqui se necessário
+        store_id: req.body.store_id || null,
+        created_at: new Date(),
+        updated_at: new Date()
       },
       include: {
         categories: {
           select: {
             id: true,
-            name: true
+            name: true,
+            color: true
           }
         }
       }
     });
+    
+    console.log('Produto criado:', product);
     res.status(201).json(product);
   } catch (error) {
     console.error('Erro ao criar produto:', error);
@@ -74,18 +111,26 @@ router.post('/', authenticateJWT, upload.single('image'), async (req, res) => {
   }
 });
 
-// Listar produtos
+// Listar produtos do usuário
 router.get('/', authenticateJWT, async (req, res) => {
+  if (!req.user) return res.status(401).json({ error: 'Usuário não autenticado' });
+  
   try {
     const products = await prisma.products.findMany({
-      where: { is_active: true },
+      where: { 
+        user_id: req.user.id 
+      },
       include: {
         categories: {
           select: {
             id: true,
-            name: true
+            name: true,
+            color: true
           }
         }
+      },
+      orderBy: {
+        created_at: 'desc'
       }
     });
     res.json(products);
@@ -97,10 +142,13 @@ router.get('/', authenticateJWT, async (req, res) => {
 
 // Buscar produto por ID
 router.get('/:id', authenticateJWT, async (req, res) => {
+  if (!req.user) return res.status(401).json({ error: 'Usuário não autenticado' });
+  
   const parse = idParamSchema.safeParse(req.params);
   if (!parse.success) {
     return res.status(400).json({ error: 'Parâmetro inválido', details: parse.error.issues });
   }
+  
   try {
     const product = await prisma.products.findUnique({
       where: { id: req.params.id },
@@ -108,7 +156,8 @@ router.get('/:id', authenticateJWT, async (req, res) => {
         categories: {
           select: {
             id: true,
-            name: true
+            name: true,
+            color: true
           }
         }
       }
@@ -116,6 +165,11 @@ router.get('/:id', authenticateJWT, async (req, res) => {
     
     if (!product) {
       return res.status(404).json({ error: 'Produto não encontrado' });
+    }
+    
+    // Verificar se o produto pertence ao usuário
+    if (product.user_id !== req.user.id) {
+      return res.status(403).json({ error: 'Produto não pertence ao usuário' });
     }
     
     res.json(product);
@@ -127,23 +181,54 @@ router.get('/:id', authenticateJWT, async (req, res) => {
 
 // Atualizar produto
 router.put('/:id', authenticateJWT, async (req, res) => {
+  if (!req.user) return res.status(401).json({ error: 'Usuário não autenticado' });
+  
   const parse = idParamSchema.safeParse(req.params);
   if (!parse.success) {
     return res.status(400).json({ error: 'Parâmetro inválido', details: parse.error.issues });
   }
   
   try {
-    // Prepara os dados para atualização, mapeando os campos corretos
-    const updateData: any = {};
+    // Verifica se o produto pertence ao usuário
+    const existingProduct = await prisma.products.findUnique({
+      where: { id: req.params.id },
+      select: { user_id: true }
+    });
     
+    if (!existingProduct) {
+      return res.status(404).json({ error: 'Produto não encontrado' });
+    }
+    
+    if (existingProduct.user_id !== req.user.id) {
+      return res.status(403).json({ error: 'Produto não pertence ao usuário' });
+    }
+    
+    // Prepara os dados para atualização com mapeamento correto
+    const updateData: any = {
+      updated_at: new Date()
+    };
+    
+    // Mapear todos os campos possíveis do frontend
     if (req.body.name !== undefined) updateData.name = req.body.name;
     if (req.body.price !== undefined) updateData.price = parseFloat(req.body.price);
     if (req.body.stock !== undefined) updateData.stock = parseInt(req.body.stock);
     if (req.body.description !== undefined) updateData.description = req.body.description;
+    
+    // Categoria pode vir como 'category', 'category_id' ou 'categoryId'
     if (req.body.category !== undefined) updateData.category_id = req.body.category || null;
+    if (req.body.category_id !== undefined) updateData.category_id = req.body.category_id || null;
+    if (req.body.categoryId !== undefined) updateData.category_id = req.body.categoryId || null;
+    
+    // Status ativo pode vir como 'isActive' ou 'is_active'
     if (req.body.isActive !== undefined) updateData.is_active = req.body.isActive;
+    if (req.body.is_active !== undefined) updateData.is_active = req.body.is_active;
+    
+    // Imagens
     if (req.body.image !== undefined) updateData.image = req.body.image;
     if (req.body.images !== undefined) updateData.images = req.body.images;
+    
+    console.log('Dados recebidos para atualização:', req.body);
+    console.log('Dados que serão atualizados:', updateData);
     
     const product = await prisma.products.update({
       where: { id: req.params.id },
@@ -152,15 +237,18 @@ router.put('/:id', authenticateJWT, async (req, res) => {
         categories: {
           select: {
             id: true,
-            name: true
+            name: true,
+            color: true
           }
         }
       }
     });
+    
+    console.log('Produto atualizado:', product);
     res.json(product);
   } catch (error) {
     console.error('Erro ao atualizar produto:', error);
-    res.status(500).json({ error: 'Erro interno do servidor' });
+    res.status(500).json({ error: 'Erro interno do servidor', details: error });
   }
 });
 
@@ -178,6 +266,83 @@ router.delete('/:id', authenticateJWT, async (req, res) => {
   } catch (error) {
     console.error('Erro ao deletar produto:', error);
     res.status(500).json({ error: 'Erro interno do servidor' });
+  }
+});
+
+// Rota para testar upload de imagem isoladamente
+router.post('/test-upload', authenticateJWT, upload.single('image'), async (req, res) => {
+  if (!req.user) return res.status(401).json({ error: 'Usuário não autenticado' });
+
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'Nenhuma imagem enviada' });
+    }
+
+    console.log('=== TESTE DE UPLOAD ===');
+    console.log('Arquivo recebido:', {
+      originalname: req.file.originalname,
+      mimetype: req.file.mimetype,
+      size: req.file.size
+    });
+
+    // Verificar configuração Supabase
+    if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) {
+      return res.status(500).json({ 
+        error: 'Configuração Supabase não encontrada',
+        details: {
+          hasUrl: !!process.env.SUPABASE_URL,
+          hasKey: !!process.env.SUPABASE_SERVICE_KEY
+        }
+      });
+    }
+
+    const fileExt = req.file.originalname.split('.').pop();
+    const fileName = `test-${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${fileExt}`;
+    
+    console.log('Fazendo upload:', fileName);
+    
+    const { data, error } = await supabase.storage
+      .from('products')
+      .upload(fileName, req.file.buffer, {
+        contentType: req.file.mimetype,
+        upsert: false
+      });
+      
+    if (error) {
+      console.error('Erro no upload:', error);
+      return res.status(500).json({ 
+        error: 'Erro ao fazer upload', 
+        details: error,
+        supabaseConfig: {
+          url: process.env.SUPABASE_URL?.substring(0, 20) + '...',
+          hasKey: !!process.env.SUPABASE_SERVICE_KEY
+        }
+      });
+    }
+    
+    // Gerar URL pública
+    const { data: urlData } = supabase.storage
+      .from('products')
+      .getPublicUrl(fileName);
+      
+    console.log('Upload bem-sucedido:', {
+      path: data.path,
+      publicUrl: urlData.publicUrl
+    });
+      
+    res.json({
+      success: true,
+      fileName: fileName,
+      path: data.path,
+      publicUrl: urlData.publicUrl,
+      uploadData: data
+    });
+  } catch (error: any) {
+    console.error('Erro no teste de upload:', error);
+    res.status(500).json({ 
+      error: 'Erro interno no teste de upload', 
+      details: error.message 
+    });
   }
 });
 
