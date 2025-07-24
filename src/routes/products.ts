@@ -149,6 +149,17 @@ router.post('/', authenticateJWT, upload.single('image'), async (req, res) => {
       mapped_categoryId: categoryId
     });
     
+    // Mapear store_id corretamente  
+    let storeId = null;
+    if (req.body.store_id) storeId = req.body.store_id;
+    else if (req.body.storeId) storeId = req.body.storeId;
+    
+    console.log('Store mapeado:', {
+      original_store_id: req.body.store_id,
+      original_storeId: req.body.storeId,
+      mapped_storeId: storeId
+    });
+    
     const product = await prisma.products.create({
       data: {
         name: req.body.name,
@@ -160,7 +171,7 @@ router.post('/', authenticateJWT, upload.single('image'), async (req, res) => {
         description: req.body.description || null,
         image: imageUrl,
         images: imageUrl ? [imageUrl] : [],
-        store_id: req.body.store_id || null,
+        store_id: storeId,
         created_at: new Date(),
         updated_at: new Date()
       },
@@ -183,6 +194,17 @@ router.post('/', authenticateJWT, upload.single('image'), async (req, res) => {
     console.log('- Imagem URL:', product.image);
     console.log('- Images Array:', product.images);
     console.log('- Store ID:', product.store_id);
+    console.log('- Is Active:', product.is_active);
+    
+    // Verificar se o produto aparecerá na vitrine
+    if (product.store_id && product.is_active) {
+      console.log('✅ Produto deve aparecer na vitrine pública (tem store_id e is_active)');
+    } else {
+      console.log('❌ Produto NÃO aparecerá na vitrine:', {
+        tem_store_id: !!product.store_id,
+        is_active: product.is_active
+      });
+    }
     
     res.status(201).json(product);
   } catch (error) {
@@ -346,6 +368,67 @@ router.delete('/:id', authenticateJWT, async (req, res) => {
   } catch (error) {
     console.error('Erro ao deletar produto:', error);
     res.status(500).json({ error: 'Erro interno do servidor' });
+  }
+});
+
+// Rota temporária para corrigir produtos sem store_id
+router.post('/fix-store-id', authenticateJWT, async (req, res) => {
+  if (!req.user) return res.status(401).json({ error: 'Usuário não autenticado' });
+
+  try {
+    // Buscar a loja "catalofacil" - assumindo que é esta loja
+    const loja = await prisma.stores.findUnique({ 
+      where: { slug: 'catalofacil' },
+      select: { id: true, name: true }
+    });
+    
+    if (!loja) {
+      return res.status(404).json({ error: 'Loja catalofacil não encontrada' });
+    }
+
+    console.log('Loja encontrada:', loja);
+
+    // Buscar produtos sem store_id do usuário atual
+    const produtosSemStore = await prisma.products.findMany({
+      where: {
+        user_id: req.user.id,
+        store_id: null
+      },
+      select: { id: true, name: true, user_id: true, store_id: true }
+    });
+
+    console.log('Produtos sem store_id encontrados:', produtosSemStore);
+
+    if (produtosSemStore.length === 0) {
+      return res.json({ 
+        message: 'Nenhum produto sem store_id encontrado',
+        loja_id: loja.id
+      });
+    }
+
+    // Atualizar produtos para incluir o store_id
+    const resultado = await prisma.products.updateMany({
+      where: {
+        user_id: req.user.id,
+        store_id: null
+      },
+      data: {
+        store_id: loja.id
+      }
+    });
+
+    console.log('Produtos atualizados:', resultado);
+
+    res.json({
+      message: `${resultado.count} produtos foram corrigidos com store_id`,
+      loja_id: loja.id,
+      loja_nome: loja.name,
+      produtos_corrigidos: produtosSemStore.length
+    });
+
+  } catch (error) {
+    console.error('Erro ao corrigir store_id:', error);
+    res.status(500).json({ error: 'Erro interno do servidor', details: error });
   }
 });
 

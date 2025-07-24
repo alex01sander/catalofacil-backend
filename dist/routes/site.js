@@ -53,10 +53,25 @@ router.get('/public/:slug/products', async (req, res) => {
         return res.status(400).json({ error: 'Parâmetro inválido', details: parse.error.issues });
     }
     const { slug } = req.params;
+    console.log('=== DEBUG VITRINE PÚBLICA ===');
+    console.log('Slug solicitado:', slug);
     // Busca a loja pelo slug
     const loja = await prisma_1.default.stores.findUnique({ where: { slug }, select: { id: true } });
+    console.log('Loja encontrada:', loja);
     if (!loja)
         return res.status(404).json({ error: 'Loja não encontrada' });
+    // Debug: ver todos os produtos dessa loja (ativos e inativos)
+    const todosProdutos = await prisma_1.default.products.findMany({
+        where: { store_id: loja.id },
+        select: { id: true, name: true, is_active: true, store_id: true }
+    });
+    console.log('Todos os produtos da loja:', todosProdutos);
+    // Debug: ver produtos sem store_id
+    const produtosSemStore = await prisma_1.default.products.findMany({
+        where: { store_id: null },
+        select: { id: true, name: true, is_active: true, store_id: true }
+    });
+    console.log('Produtos sem store_id:', produtosSemStore);
     // Busca produtos ativos dessa loja com dados da categoria
     const produtos = await prisma_1.default.products.findMany({
         where: {
@@ -79,6 +94,8 @@ router.get('/public/:slug/products', async (req, res) => {
             // Adicione outros campos públicos se necessário
         }
     });
+    console.log('Produtos ativos encontrados para vitrine:', produtos.length);
+    console.log('Lista de produtos:', produtos.map(p => ({ id: p.id, name: p.name, store_id: p.categories })));
     res.json(produtos);
 });
 // Rota pública: categorias disponíveis para compra
