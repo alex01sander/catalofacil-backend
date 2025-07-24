@@ -51,7 +51,19 @@ router.post('/', authenticateJWT, upload.single('image'), async (req, res) => {
     let imageUrl = null;
     
     console.log('=== DEBUG UPLOAD IMAGEM ===');
-    console.log('Arquivo recebido:', !!req.file);
+    console.log('Arquivo recebido via multer:', !!req.file);
+    console.log('Campo image no body:', !!req.body.image);
+    console.log('Campo images no body:', req.body.images);
+    console.log('Tipo do campo images:', typeof req.body.images);
+    
+    // Se não há arquivo no multer mas há URL no body, usar essa URL
+    if (!req.file && req.body.image) {
+      console.log('Usando imagem do body (já enviada):', req.body.image);
+      imageUrl = req.body.image;
+    } else if (!req.file && req.body.images && Array.isArray(req.body.images) && req.body.images.length > 0) {
+      console.log('Usando primeira imagem do array images:', req.body.images[0]);
+      imageUrl = req.body.images[0];
+    }
     
     if (req.file) {
       console.log('Detalhes do arquivo:', {
@@ -124,6 +136,19 @@ router.post('/', authenticateJWT, upload.single('image'), async (req, res) => {
     console.log('Dados recebidos para criação:', req.body);
     console.log('ImageUrl final:', imageUrl);
     
+    // Mapear categoria corretamente
+    let categoryId = null;
+    if (req.body.category_id) categoryId = req.body.category_id;
+    else if (req.body.category) categoryId = req.body.category;
+    else if (req.body.categoryId) categoryId = req.body.categoryId;
+    
+    console.log('Categoria mapeada:', {
+      original_category: req.body.category,
+      original_category_id: req.body.category_id,
+      original_categoryId: req.body.categoryId,
+      mapped_categoryId: categoryId
+    });
+    
     const product = await prisma.products.create({
       data: {
         name: req.body.name,
@@ -131,7 +156,7 @@ router.post('/', authenticateJWT, upload.single('image'), async (req, res) => {
         stock: parseInt(req.body.stock) || 0,
         is_active: req.body.isActive !== undefined ? req.body.isActive : true,
         user_id: req.user.id,
-        category_id: req.body.category || req.body.categoryId || null,
+        category_id: categoryId,
         description: req.body.description || null,
         image: imageUrl,
         images: imageUrl ? [imageUrl] : [],
@@ -150,7 +175,15 @@ router.post('/', authenticateJWT, upload.single('image'), async (req, res) => {
       }
     });
     
-    console.log('Produto criado:', product);
+    console.log('Produto criado com sucesso:');
+    console.log('- ID:', product.id);
+    console.log('- Nome:', product.name);
+    console.log('- Preço:', product.price);
+    console.log('- Categoria ID:', product.category_id);
+    console.log('- Imagem URL:', product.image);
+    console.log('- Images Array:', product.images);
+    console.log('- Store ID:', product.store_id);
+    
     res.status(201).json(product);
   } catch (error) {
     console.error('Erro ao criar produto:', error);
