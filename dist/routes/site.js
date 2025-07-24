@@ -29,22 +29,56 @@ router.get('/public/:slug', async (req, res) => {
         return res.status(400).json({ error: 'Parâmetro inválido', details: parse.error.issues });
     }
     const { slug } = req.params;
+    console.log('=== DEBUG CONFIGURAÇÕES LOJA ===');
+    console.log('Slug solicitado:', slug);
     const loja = await prisma_1.default.stores.findUnique({
         where: { slug },
         select: {
-            id: true, // Garante que o campo id está presente
+            id: true,
             name: true,
             description: true,
             logo_url: true,
             banner_url: true,
             whatsapp_number: true,
             instagram_url: true,
-            theme_color: true
+            theme_color: true,
+            user_id: true // Incluir user_id para buscar configurações
         }
     });
     if (!loja)
         return res.status(404).json({ error: 'Loja não encontrada' });
-    res.json(loja);
+    console.log('Dados da loja (stores):', loja);
+    // Buscar configurações do admin (store_settings)
+    const configuracoes = await prisma_1.default.store_settings.findUnique({
+        where: { user_id: loja.user_id },
+        select: {
+            store_name: true,
+            store_description: true,
+            store_subtitle: true,
+            instagram_url: true,
+            whatsapp_number: true,
+            mobile_logo: true,
+            desktop_banner: true,
+            mobile_banner_image: true,
+            mobile_banner_color: true
+        }
+    });
+    console.log('Configurações do admin (store_settings):', configuracoes);
+    // Mesclar dados: prioridade para configurações do admin
+    const dadosFinais = {
+        id: loja.id,
+        name: configuracoes?.store_name || loja.name,
+        description: configuracoes?.store_description || loja.description,
+        subtitle: configuracoes?.store_subtitle || null,
+        logo_url: configuracoes?.mobile_logo || loja.logo_url,
+        banner_url: configuracoes?.desktop_banner || configuracoes?.mobile_banner_image || loja.banner_url,
+        banner_color: configuracoes?.mobile_banner_color || null,
+        whatsapp_number: configuracoes?.whatsapp_number || loja.whatsapp_number,
+        instagram_url: configuracoes?.instagram_url || loja.instagram_url,
+        theme_color: loja.theme_color
+    };
+    console.log('Dados finais mesclados:', dadosFinais);
+    res.json(dadosFinais);
 });
 // Rota pública: produtos disponíveis para compra
 router.get('/public/:slug/products', async (req, res) => {
