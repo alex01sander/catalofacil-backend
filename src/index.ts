@@ -54,12 +54,6 @@ if (missingEnv.length > 0) {
 // Configurações de segurança
 app.use(helmet());
 
-// CORS fixo para liberar o frontend
-app.use(require('cors')({
-  origin: 'https://catalofacil.catalofacil.com.br',
-  credentials: true
-}));
-
 // Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutos
@@ -73,6 +67,7 @@ const corsOptions: CorsOptionsDelegate<CorsRequest> = async (req, callback) => {
   const origin = req.headers['origin'] as string | undefined;
   // Log para debug de CORS
   if (origin) console.log('CORS Origin:', origin);
+  
   // Permite requisições sem origin (ex: ferramentas internas, curl, etc)
   if (!origin) return callback(null, { origin: true, credentials: true, optionsSuccessStatus: 200 });
 
@@ -81,14 +76,14 @@ const corsOptions: CorsOptionsDelegate<CorsRequest> = async (req, callback) => {
     origin.endsWith('.catalofacil.com.br') ||
     origin === 'https://catalofacil.catalofacil.com.br'
   ) {
-    return callback(null, { origin: 'https://catalofacil.catalofacil.com.br', credentials: true, optionsSuccessStatus: 200 });
+    return callback(null, { origin: origin, credentials: true, optionsSuccessStatus: 200 });
   }
 
   // Permite o domínio principal
-  if (origin === 'https://catalofacil.com.br') return callback(null, { origin: 'https://catalofacil.com.br', credentials: true, optionsSuccessStatus: 200 });
+  if (origin === 'https://catalofacil.com.br') return callback(null, { origin: origin, credentials: true, optionsSuccessStatus: 200 });
 
   // Permite o frontend do Vercel (domínio principal e preview deployments)
-  if (origin === 'https://catalofacil-frontend.vercel.app') return callback(null, { origin: 'https://catalofacil-frontend.vercel.app', credentials: true, optionsSuccessStatus: 200 });
+  if (origin === 'https://catalofacil-frontend.vercel.app') return callback(null, { origin: origin, credentials: true, optionsSuccessStatus: 200 });
   
   // Permite preview deployments do Vercel
   if (origin && origin.includes('catalofacil-frontend') && origin.includes('vercel.app')) {
@@ -106,7 +101,7 @@ const corsOptions: CorsOptionsDelegate<CorsRequest> = async (req, callback) => {
     // Verifica se o domínio está cadastrado como slug na tabela Domain
     const slug = origin.replace('https://', '').replace('.catalofacil.com.br', '');
     const domain = await prisma.domain.findFirst({ where: { slug } });
-    if (domain) return callback(null, { origin: true, credentials: true, optionsSuccessStatus: 200 });
+    if (domain) return callback(null, { origin: origin, credentials: true, optionsSuccessStatus: 200 });
   } catch (e) {
     console.error('Erro ao consultar domínio para CORS:', e);
   }

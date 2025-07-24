@@ -51,11 +51,6 @@ if (missingEnv.length > 0) {
 }
 // Configurações de segurança
 app.use((0, helmet_1.default)());
-// CORS fixo para liberar o frontend
-app.use(require('cors')({
-    origin: 'https://catalofacil.catalofacil.com.br',
-    credentials: true
-}));
 // Rate limiting
 const limiter = (0, express_rate_limit_1.default)({
     windowMs: 15 * 60 * 1000, // 15 minutos
@@ -75,14 +70,14 @@ const corsOptions = async (req, callback) => {
     // Permite todos os subdomínios e o domínio principal catalofacil.catalofacil.com.br
     if (origin.endsWith('.catalofacil.com.br') ||
         origin === 'https://catalofacil.catalofacil.com.br') {
-        return callback(null, { origin: 'https://catalofacil.catalofacil.com.br', credentials: true, optionsSuccessStatus: 200 });
+        return callback(null, { origin: origin, credentials: true, optionsSuccessStatus: 200 });
     }
     // Permite o domínio principal
     if (origin === 'https://catalofacil.com.br')
-        return callback(null, { origin: 'https://catalofacil.com.br', credentials: true, optionsSuccessStatus: 200 });
+        return callback(null, { origin: origin, credentials: true, optionsSuccessStatus: 200 });
     // Permite o frontend do Vercel (domínio principal e preview deployments)
     if (origin === 'https://catalofacil-frontend.vercel.app')
-        return callback(null, { origin: 'https://catalofacil-frontend.vercel.app', credentials: true, optionsSuccessStatus: 200 });
+        return callback(null, { origin: origin, credentials: true, optionsSuccessStatus: 200 });
     // Permite preview deployments do Vercel
     if (origin && origin.includes('catalofacil-frontend') && origin.includes('vercel.app')) {
         console.log('Permitindo acesso ao preview deployment do Vercel:', origin);
@@ -98,7 +93,7 @@ const corsOptions = async (req, callback) => {
         const slug = origin.replace('https://', '').replace('.catalofacil.com.br', '');
         const domain = await prisma_1.default.domain.findFirst({ where: { slug } });
         if (domain)
-            return callback(null, { origin: true, credentials: true, optionsSuccessStatus: 200 });
+            return callback(null, { origin: origin, credentials: true, optionsSuccessStatus: 200 });
     }
     catch (e) {
         console.error('Erro ao consultar domínio para CORS:', e);

@@ -7,24 +7,47 @@ import { z } from 'zod';
 const router = Router();
 const idParamSchema = z.object({ id: z.string().min(1, 'ID obrigatório') });
 
-// Listar todas as categorias
+// Listar categorias do usuário
 router.get('/', authenticateJWT, async (req, res) => {
-  const categorias = await prisma.categories.findMany({ include: { products: true, stores: true, users: true } });
-  res.json(categorias);
+  if (!req.user) return res.status(401).json({ error: 'Usuário não autenticado' });
+  
+  try {
+    const categorias = await prisma.categories.findMany({ 
+      where: { user_id: req.user.id },
+      include: { products: true, stores: true, users: true },
+      orderBy: { name: 'asc' }
+    });
+    res.json(categorias);
+  } catch (error) {
+    console.error('Erro ao listar categorias:', error);
+    res.status(500).json({ error: 'Erro interno do servidor' });
+  }
 });
 
-// Buscar categoria por ID
+// Buscar categoria por ID (do usuário)
 router.get('/:id', authenticateJWT, async (req, res) => {
+  if (!req.user) return res.status(401).json({ error: 'Usuário não autenticado' });
+  
   const parse = idParamSchema.safeParse(req.params);
   if (!parse.success) {
     return res.status(400).json({ error: 'Parâmetro inválido', details: parse.error.issues });
   }
-  const categoria = await prisma.categories.findUnique({
-    where: { id: req.params.id },
-    include: { products: true, stores: true, users: true }
-  });
-  if (!categoria) return res.status(404).json({ error: 'Categoria não encontrada' });
-  res.json(categoria);
+  
+  try {
+    const categoria = await prisma.categories.findFirst({
+      where: { 
+        id: req.params.id,
+        user_id: req.user.id 
+      },
+      include: { products: true, stores: true, users: true }
+    });
+    
+    if (!categoria) return res.status(404).json({ error: 'Categoria não encontrada' });
+    res.json(categoria);
+  } catch (error) {
+    console.error('Erro ao buscar categoria:', error);
+    res.status(500).json({ error: 'Erro interno do servidor' });
+  }
 });
 
 // Criar categoria
@@ -53,8 +76,10 @@ router.post('/', authenticateJWT, async (req, res) => {
   }
 });
 
-// Atualizar categoria
+// Atualizar categoria (apenas do usuário)
 router.put('/:id', authenticateJWT, async (req, res) => {
+  if (!req.user) return res.status(401).json({ error: 'Usuário não autenticado' });
+  
   const parseParams = idParamSchema.safeParse(req.params);
   if (!parseParams.success) {
     return res.status(400).json({ error: 'Parâmetro inválido', details: parseParams.error.issues });
@@ -63,28 +88,52 @@ router.put('/:id', authenticateJWT, async (req, res) => {
   if (!parseBody.success) {
     return res.status(400).json({ error: 'Dados inválidos', details: parseBody.error.issues });
   }
+  
   try {
+    // Verificar se a categoria pertence ao usuário
+    const categoriaExistente = await prisma.categories.findFirst({
+      where: { id: req.params.id, user_id: req.user.id }
+    });
+    
+    if (!categoriaExistente) {
+      return res.status(404).json({ error: 'Categoria não encontrada' });
+    }
+    
     const atualizada = await prisma.categories.update({
       where: { id: req.params.id },
       data: parseBody.data,
     });
     res.json(atualizada);
   } catch (e) {
-    res.status(400).json({ error: 'Erro ao atualizar categoria', details: e });
+    console.error('Erro ao atualizar categoria:', e);
+    res.status(500).json({ error: 'Erro ao atualizar categoria', details: e });
   }
 });
 
-// Deletar categoria
+// Deletar categoria (apenas do usuário)
 router.delete('/:id', authenticateJWT, async (req, res) => {
+  if (!req.user) return res.status(401).json({ error: 'Usuário não autenticado' });
+  
   const parse = idParamSchema.safeParse(req.params);
   if (!parse.success) {
     return res.status(400).json({ error: 'Parâmetro inválido', details: parse.error.issues });
   }
+  
   try {
+    // Verificar se a categoria pertence ao usuário
+    const categoriaExistente = await prisma.categories.findFirst({
+      where: { id: req.params.id, user_id: req.user.id }
+    });
+    
+    if (!categoriaExistente) {
+      return res.status(404).json({ error: 'Categoria não encontrada' });
+    }
+    
     await prisma.categories.delete({ where: { id: req.params.id } });
     res.status(204).send();
   } catch (e) {
-    res.status(400).json({ error: 'Erro ao deletar categoria', details: e });
+    console.error('Erro ao deletar categoria:', e);
+    res.status(500).json({ error: 'Erro ao deletar categoria', details: e });
   }
 });
 
