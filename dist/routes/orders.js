@@ -108,18 +108,34 @@ router.get('/:id', auth_1.default, async (req, res) => {
         });
     }
 });
-// Criar pedido
+// Criar pedido + itens
 router.post('/', async (req, res) => {
-    const parse = zod_1.ordersCreateInputSchema.safeParse(req.body);
+    const { order_items, ...pedidoData } = req.body;
+    // Validação: pedido deve conter pelo menos um item
+    if (!order_items || !Array.isArray(order_items) || order_items.length === 0) {
+        return res.status(400).json({ error: 'Pedido deve conter pelo menos um item.' });
+    }
+    // Validação dos dados do pedido (exceto itens)
+    const parse = zod_1.ordersCreateInputSchema.safeParse(pedidoData);
     if (!parse.success) {
         return res.status(400).json({ error: 'Dados inválidos', details: parse.error.issues });
     }
     try {
-        const novo = await prisma_1.default.orders.create({ data: parse.data });
+        const novo = await prisma_1.default.orders.create({
+            data: {
+                ...parse.data,
+                order_items: {
+                    create: order_items
+                }
+            },
+            include: {
+                order_items: true
+            }
+        });
         res.status(201).json(novo);
     }
     catch (e) {
-        res.status(400).json({ error: 'Erro ao criar pedido', details: e });
+        res.status(400).json({ error: 'Erro ao criar pedido', details: e instanceof Error ? e.message : e });
     }
 });
 // Atualizar pedido
