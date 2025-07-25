@@ -60,44 +60,56 @@ app.use(rateLimiter_1.apiSlowDown);
 const corsOptions = async (req, callback) => {
     const origin = req.headers['origin'];
     // Log para debug de CORS
-    if (origin)
-        console.log('CORS Origin:', origin);
+    console.log('🌍 CORS Debug:', {
+        origin,
+        userAgent: req.headers['user-agent']?.substring(0, 50)
+    });
     // Permite requisições sem origin (ex: ferramentas internas, curl, etc)
-    if (!origin)
+    if (!origin) {
+        console.log('✅ CORS: Permitindo requisição sem origin');
         return callback(null, { origin: true, credentials: true, optionsSuccessStatus: 200 });
-    // Permite todos os subdomínios e o domínio principal catalofacil.catalofacil.com.br
-    if (origin.endsWith('.catalofacil.com.br') ||
-        origin === 'https://catalofacil.catalofacil.com.br') {
+    }
+    // Lista de origens permitidas
+    const allowedOrigins = [
+        'https://catalofacil.catalofacil.com.br',
+        'https://catalofacil.com.br',
+        'https://catalofacil-frontend.vercel.app'
+    ];
+    // Verifica origens exatas
+    if (allowedOrigins.includes(origin)) {
+        console.log('✅ CORS: Permitindo origem conhecida:', origin);
         return callback(null, { origin: origin, credentials: true, optionsSuccessStatus: 200 });
     }
-    // Permite o domínio principal
-    if (origin === 'https://catalofacil.com.br')
+    // Permite todos os subdomínios .catalofacil.com.br
+    if (origin.endsWith('.catalofacil.com.br')) {
+        console.log('✅ CORS: Permitindo subdomínio catalofacil.com.br:', origin);
         return callback(null, { origin: origin, credentials: true, optionsSuccessStatus: 200 });
-    // Permite o frontend do Vercel (domínio principal e preview deployments)
-    if (origin === 'https://catalofacil-frontend.vercel.app')
-        return callback(null, { origin: origin, credentials: true, optionsSuccessStatus: 200 });
+    }
     // Permite preview deployments do Vercel
     if (origin && origin.includes('catalofacil-frontend') && origin.includes('vercel.app')) {
-        console.log('Permitindo acesso ao preview deployment do Vercel:', origin);
+        console.log('✅ CORS: Permitindo preview deployment do Vercel:', origin);
         return callback(null, { origin: origin, credentials: true, optionsSuccessStatus: 200 });
     }
     // Permite qualquer preview deployment do Vercel relacionado ao projeto
     if (origin && origin.includes('-alex-brittos-projects.vercel.app')) {
-        console.log('Permitindo acesso ao preview deployment personalizado:', origin);
+        console.log('✅ CORS: Permitindo preview deployment personalizado:', origin);
         return callback(null, { origin: origin, credentials: true, optionsSuccessStatus: 200 });
     }
     try {
         // Verifica se o domínio está cadastrado como slug na tabela Domain
         const slug = origin.replace('https://', '').replace('.catalofacil.com.br', '');
         const domain = await prisma_1.default.domain.findFirst({ where: { slug } });
-        if (domain)
+        if (domain) {
+            console.log('✅ CORS: Permitindo domínio cadastrado:', origin);
             return callback(null, { origin: origin, credentials: true, optionsSuccessStatus: 200 });
+        }
     }
     catch (e) {
-        console.error('Erro ao consultar domínio para CORS:', e);
+        console.error('❌ Erro ao consultar domínio para CORS:', e);
     }
     // Bloqueia qualquer outro domínio
-    return callback(new Error('Not allowed by CORS'), { origin: false });
+    console.log('❌ CORS: Bloqueando origem não permitida:', origin);
+    return callback(new Error(`CORS: Origem '${origin}' não permitida`), { origin: false });
 };
 app.use((0, cors_1.default)(corsOptions));
 app.use(express_1.default.json({ limit: '10mb' }));
@@ -105,8 +117,29 @@ app.use(express_1.default.urlencoded({ limit: '10mb', extended: true }));
 // Middleware de logging seguro
 app.use((req, res, next) => {
     // Nunca logar dados sensíveis como req.body ou req.headers!
-    console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.path} - Origin: ${req.headers.origin || 'none'}`);
     next();
+});
+// Middleware para capturar erros não tratados
+app.use((err, req, res, next) => {
+    console.error('💥 Erro não tratado capturado:', {
+        error: err.message,
+        stack: err.stack?.substring(0, 500),
+        method: req.method,
+        path: req.path,
+        origin: req.headers.origin,
+        timestamp: new Date().toISOString()
+    });
+    // Se headers já foram enviados, delegar para o error handler padrão do Express
+    if (res.headersSent) {
+        return next(err);
+    }
+    // Responder com erro genérico
+    res.status(500).json({
+        error: 'Erro interno do servidor',
+        message: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong!',
+        timestamp: new Date().toISOString()
+    });
 });
 // Rota de teste
 app.get('/', (req, res) => {
