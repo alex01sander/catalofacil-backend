@@ -10,10 +10,62 @@ const auth_1 = __importDefault(require("../middleware/auth"));
 const zod_2 = require("zod");
 const router = (0, express_1.Router)();
 const idParamSchema = zod_2.z.object({ id: zod_2.z.string().min(1, 'ID obrigatório') });
-// Listar todos os pedidos
+// Listar todos os pedidos (MELHORADA - apenas pedidos com itens)
 router.get('/', auth_1.default, async (req, res) => {
-    const pedidos = await prisma_1.default.orders.findMany({ include: { order_items: true, customers: true, stores: true } });
-    res.json(pedidos);
+    try {
+        const pedidos = await prisma_1.default.orders.findMany({
+            where: {
+                order_items: {
+                    some: {} // Só retorna pedidos que têm pelo menos 1 item
+                }
+            },
+            include: {
+                order_items: {
+                    include: {
+                        products: {
+                            select: {
+                                id: true,
+                                name: true,
+                                description: true,
+                                price: true,
+                                image: true,
+                                images: true
+                            }
+                        }
+                    }
+                },
+                customers: {
+                    select: {
+                        id: true,
+                        name: true,
+                        email: true,
+                        phone: true
+                    }
+                },
+                stores: {
+                    select: {
+                        id: true,
+                        name: true,
+                        slug: true
+                    }
+                }
+            },
+            orderBy: {
+                created_at: 'desc'
+            }
+        });
+        // Log para debug
+        console.log(`📊 Retornando ${pedidos.length} pedidos para o frontend`);
+        console.log(`🔍 Primeiro pedido tem ${pedidos[0]?.order_items?.length || 0} itens`);
+        res.json(pedidos);
+    }
+    catch (error) {
+        console.error('❌ Erro ao buscar pedidos:', error);
+        res.status(500).json({
+            error: 'Erro interno do servidor',
+            details: error instanceof Error ? error.message : 'Erro desconhecido'
+        });
+    }
 });
 // Buscar pedido por ID
 router.get('/:id', auth_1.default, async (req, res) => {
@@ -21,13 +73,40 @@ router.get('/:id', auth_1.default, async (req, res) => {
     if (!parse.success) {
         return res.status(400).json({ error: 'Parâmetro inválido', details: parse.error.issues });
     }
-    const pedido = await prisma_1.default.orders.findUnique({
-        where: { id: req.params.id },
-        include: { order_items: true, customers: true, stores: true }
-    });
-    if (!pedido)
-        return res.status(404).json({ error: 'Pedido não encontrado' });
-    res.json(pedido);
+    try {
+        const pedido = await prisma_1.default.orders.findUnique({
+            where: { id: req.params.id },
+            include: {
+                order_items: {
+                    include: {
+                        products: {
+                            select: {
+                                id: true,
+                                name: true,
+                                description: true,
+                                price: true,
+                                image: true,
+                                images: true,
+                                stock: true
+                            }
+                        }
+                    }
+                },
+                customers: true,
+                stores: true
+            }
+        });
+        if (!pedido)
+            return res.status(404).json({ error: 'Pedido não encontrado' });
+        res.json(pedido);
+    }
+    catch (error) {
+        console.error('❌ Erro ao buscar pedido:', error);
+        res.status(500).json({
+            error: 'Erro interno do servidor',
+            details: error instanceof Error ? error.message : 'Erro desconhecido'
+        });
+    }
 });
 // Criar pedido
 router.post('/', async (req, res) => {
