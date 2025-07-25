@@ -62,69 +62,36 @@ app.use(helmet());
 app.use(basicRateLimit);
 app.use(apiSlowDown);
 
-// CORS dinâmico para multi-tenant (subdomínios e domínios personalizados)
-const corsOptions: CorsOptionsDelegate<CorsRequest> = async (req, callback) => {
-  const origin = req.headers['origin'] as string | undefined;
-  
-  // Log para debug de CORS
-  console.log('🌍 CORS Debug:', {
-    origin,
-    userAgent: req.headers['user-agent']?.substring(0, 50)
-  });
-  
-  // Permite requisições sem origin (ex: ferramentas internas, curl, etc)
-  if (!origin) {
-    console.log('✅ CORS: Permitindo requisição sem origin');
-    return callback(null, { origin: true, credentials: true, optionsSuccessStatus: 200 });
-  }
-
-  // Lista de origens permitidas
-  const allowedOrigins = [
+// CORS mais simples e robusto - permitir explicitamente o domínio principal
+const corsOptions = {
+  origin: [
     'https://catalofacil.catalofacil.com.br',
-    'https://catalofacil.com.br',
-    'https://catalofacil-frontend.vercel.app'
-  ];
-
-  // Verifica origens exatas
-  if (allowedOrigins.includes(origin)) {
-    console.log('✅ CORS: Permitindo origem conhecida:', origin);
-    return callback(null, { origin: origin, credentials: true, optionsSuccessStatus: 200 });
-  }
-
-  // Permite todos os subdomínios .catalofacil.com.br
-  if (origin.endsWith('.catalofacil.com.br')) {
-    console.log('✅ CORS: Permitindo subdomínio catalofacil.com.br:', origin);
-    return callback(null, { origin: origin, credentials: true, optionsSuccessStatus: 200 });
-  }
-  
-  // Permite preview deployments do Vercel
-  if (origin && origin.includes('catalofacil-frontend') && origin.includes('vercel.app')) {
-    console.log('✅ CORS: Permitindo preview deployment do Vercel:', origin);
-    return callback(null, { origin: origin, credentials: true, optionsSuccessStatus: 200 });
-  }
-  
-  // Permite qualquer preview deployment do Vercel relacionado ao projeto
-  if (origin && origin.includes('-alex-brittos-projects.vercel.app')) {
-    console.log('✅ CORS: Permitindo preview deployment personalizado:', origin);
-    return callback(null, { origin: origin, credentials: true, optionsSuccessStatus: 200 });
-  }
-
-  try {
-    // Verifica se o domínio está cadastrado como slug na tabela Domain
-    const slug = origin.replace('https://', '').replace('.catalofacil.com.br', '');
-    const domain = await prisma.domain.findFirst({ where: { slug } });
-    if (domain) {
-      console.log('✅ CORS: Permitindo domínio cadastrado:', origin);
-      return callback(null, { origin: origin, credentials: true, optionsSuccessStatus: 200 });
-    }
-  } catch (e) {
-    console.error('❌ Erro ao consultar domínio para CORS:', e);
-  }
-  
-  // Bloqueia qualquer outro domínio
-  console.log('❌ CORS: Bloqueando origem não permitida:', origin);
-  return callback(new Error(`CORS: Origem '${origin}' não permitida`), { origin: false });
+    'https://catalofacil.com.br', 
+    'https://catalofacil-frontend.vercel.app',
+    /https:\/\/.*\.catalofacil\.com\.br$/,
+    /https:\/\/.*catalofacil-frontend.*\.vercel\.app$/,
+    /https:\/\/.*-alex-brittos-projects\.vercel\.app$/
+  ],
+  credentials: true,
+  optionsSuccessStatus: 200,
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+  methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS']
 };
+
+// Log de debug para CORS
+app.use((req: Request, res: Response, next: NextFunction) => {
+  const origin = req.headers.origin;
+  if (origin && req.method === 'OPTIONS') {
+    console.log('🌍 CORS Preflight:', {
+      origin,
+      method: req.headers['access-control-request-method'],
+      headers: req.headers['access-control-request-headers'],
+      path: req.path
+    });
+  }
+  next();
+});
+
 app.use(cors(corsOptions));
 
 app.use(express.json({ limit: '10mb' }));
