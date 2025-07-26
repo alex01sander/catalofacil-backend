@@ -15,25 +15,18 @@ exports.productsCreateInputSchema = zod_1.z.object({
 exports.productsUpdateInputSchema = exports.productsCreateInputSchema.partial();
 // Sales
 exports.salesCreateInputSchema = zod_1.z.object({
-    user_id: zod_1.z.string(),
-    product_name: zod_1.z.string(),
-    quantity: zod_1.z.number(),
-    unit_price: zod_1.z.number(),
-    total_price: zod_1.z.number(),
-    sale_date: zod_1.z.date(),
-    status: zod_1.z.string().optional(),
+    product_name: zod_1.z.string().min(1, 'Nome do produto é obrigatório'),
+    quantity: zod_1.z.number().min(1, 'Quantidade deve ser maior que 0'),
+    unit_price: zod_1.z.union([zod_1.z.number(), zod_1.z.string().transform(val => parseFloat(val))]).refine(val => val > 0, 'Preço unitário deve ser maior que 0'),
+    total_price: zod_1.z.union([zod_1.z.number(), zod_1.z.string().transform(val => parseFloat(val))]).refine(val => val > 0, 'Preço total deve ser maior que 0'),
+    sale_date: zod_1.z.union([
+        zod_1.z.date(),
+        zod_1.z.string().transform(val => new Date(val))
+    ]).refine(val => !isNaN(val.getTime()), 'Data de venda inválida'),
+    status: zod_1.z.string().optional().default('completed'),
     store_id: zod_1.z.string().optional(),
 });
-exports.salesUpdateInputSchema = zod_1.z.object({
-    user_id: zod_1.z.string().optional(),
-    product_name: zod_1.z.string().optional(),
-    quantity: zod_1.z.number().optional(),
-    unit_price: zod_1.z.number().optional(),
-    total_price: zod_1.z.number().optional(),
-    sale_date: zod_1.z.date().optional(),
-    status: zod_1.z.string().optional(),
-    store_id: zod_1.z.string().optional(),
-});
+exports.salesUpdateInputSchema = exports.salesCreateInputSchema.partial();
 // Credit Transactions
 exports.credit_transactionsCreateInputSchema = zod_1.z.object({
     credit_account_id: zod_1.z.string(),

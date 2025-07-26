@@ -16,26 +16,19 @@ export const productsUpdateInputSchema = productsCreateInputSchema.partial();
 
 // Sales
 export const salesCreateInputSchema = z.object({
-  user_id: z.string(),
-  product_name: z.string(),
-  quantity: z.number(),
-  unit_price: z.number(),
-  total_price: z.number(),
-  sale_date: z.date(),
-  status: z.string().optional(),
+  product_name: z.string().min(1, 'Nome do produto é obrigatório'),
+  quantity: z.number().min(1, 'Quantidade deve ser maior que 0'),
+  unit_price: z.union([z.number(), z.string().transform(val => parseFloat(val))]).refine(val => val > 0, 'Preço unitário deve ser maior que 0'),
+  total_price: z.union([z.number(), z.string().transform(val => parseFloat(val))]).refine(val => val > 0, 'Preço total deve ser maior que 0'),
+  sale_date: z.union([
+    z.date(),
+    z.string().transform(val => new Date(val))
+  ]).refine(val => !isNaN(val.getTime()), 'Data de venda inválida'),
+  status: z.string().optional().default('completed'),
   store_id: z.string().optional(),
 });
 
-export const salesUpdateInputSchema = z.object({
-  user_id: z.string().optional(),
-  product_name: z.string().optional(),
-  quantity: z.number().optional(),
-  unit_price: z.number().optional(),
-  total_price: z.number().optional(),
-  sale_date: z.date().optional(),
-  status: z.string().optional(),
-  store_id: z.string().optional(),
-});
+export const salesUpdateInputSchema = salesCreateInputSchema.partial();
 
 // Credit Transactions
 export const credit_transactionsCreateInputSchema = z.object({

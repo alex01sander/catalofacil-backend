@@ -93,24 +93,52 @@ router.get('/:id', auth_1.default, async (req, res) => {
 router.post('/', auth_1.default, rateLimiter_1.userRateLimit, async (req, res) => {
     if (!req.user)
         return res.status(401).json({ error: 'Usuário não autenticado' });
-    const parse = zod_1.salesCreateInputSchema.safeParse(req.body);
+    console.log('📝 [Sales] Payload recebido:', JSON.stringify(req.body, null, 2));
+    // Extrair product_id se existir (será removido antes da validação)
+    const { product_id, ...saleDataWithoutProductId } = req.body;
+    const parse = zod_1.salesCreateInputSchema.safeParse(saleDataWithoutProductId);
     if (!parse.success) {
+        console.error('❌ [Sales] Erro de validação:', parse.error.issues);
         return res.status(400).json({ error: 'Dados inválidos', details: parse.error.issues });
     }
     try {
-        const nova = await prisma_1.default.sales.create({
-            data: {
-                ...parse.data,
-                user_id: req.user.id
+        // Preparar dados para o Prisma
+        const salesData = {
+            ...parse.data,
+            user_id: req.user.id,
+            // Converter valores string para número se necessário
+            unit_price: String(parse.data.unit_price),
+            total_price: String(parse.data.total_price),
+            // Garantir que sale_date seja uma Date
+            sale_date: parse.data.sale_date instanceof Date ? parse.data.sale_date : new Date(parse.data.sale_date)
+        };
+        console.log('💾 [Sales] Dados para o Prisma:', JSON.stringify(salesData, null, 2));
+        const nova = await prisma_1.default.sales.create({ data: salesData });
+        // Se product_id foi fornecido, descontar do estoque
+        if (product_id) {
+            console.log('📦 [Sales] Descontando estoque do produto:', product_id);
+            try {
+                await prisma_1.default.products.update({
+                    where: { id: product_id },
+                    data: { stock: { decrement: parse.data.quantity } }
+                });
+                console.log('✅ [Sales] Estoque atualizado com sucesso');
             }
-        });
+            catch (stockError) {
+                console.warn('⚠️ [Sales] Erro ao atualizar estoque (venda já foi criada):', stockError);
+            }
+        }
         // Limpar cache do usuário após criar venda
         (0, cache_1.clearUserCache)(req.user.id);
+        console.log('✅ [Sales] Venda criada com sucesso:', nova.id);
         res.status(201).json(nova);
     }
     catch (error) {
-        console.error('Erro ao criar venda:', error);
-        res.status(500).json({ error: 'Erro interno do servidor' });
+        console.error('❌ [Sales] Erro ao criar venda:', error);
+        res.status(500).json({
+            error: 'Erro interno do servidor',
+            details: error instanceof Error ? error.message : 'Erro desconhecido'
+        });
     }
 });
 // Atualizar venda
