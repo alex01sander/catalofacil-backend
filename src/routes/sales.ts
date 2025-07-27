@@ -69,7 +69,14 @@ router.get('/',
         prisma.sales.count({ where })
       ]);
       
-      const response = createPaginatedResponse(vendas, totalCount, req.pagination!);
+      // Converter valores decimais para números
+      const vendasComValoresNumericos = vendas.map(venda => ({
+        ...venda,
+        unit_price: parseFloat(venda.unit_price.toString()),
+        total_price: parseFloat(venda.total_price.toString())
+      }));
+      
+      const response = createPaginatedResponse(vendasComValoresNumericos, totalCount, req.pagination!);
       res.json(response);
     } catch (error) {
       console.error('Erro ao listar vendas:', error);

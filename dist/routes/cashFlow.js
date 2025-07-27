@@ -52,7 +52,12 @@ router.get('/', auth_1.default, rateLimiter_1.userRateLimit, pagination_1.pagina
             }),
             prisma_1.default.cash_flow.count({ where })
         ]);
-        const response = (0, pagination_1.createPaginatedResponse)(fluxos, totalCount, req.pagination);
+        // Converter amount de string para número
+        const fluxosComValorNumerico = fluxos.map(fluxo => ({
+            ...fluxo,
+            amount: parseFloat(fluxo.amount.toString())
+        }));
+        const response = (0, pagination_1.createPaginatedResponse)(fluxosComValorNumerico, totalCount, req.pagination);
         res.json(response);
     }
     catch (error) {

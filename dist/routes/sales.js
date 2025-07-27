@@ -61,7 +61,13 @@ router.get('/', auth_1.default, rateLimiter_1.userRateLimit, pagination_1.pagina
             }),
             prisma_1.default.sales.count({ where })
         ]);
-        const response = (0, pagination_1.createPaginatedResponse)(vendas, totalCount, req.pagination);
+        // Converter valores decimais para números
+        const vendasComValoresNumericos = vendas.map(venda => ({
+            ...venda,
+            unit_price: parseFloat(venda.unit_price.toString()),
+            total_price: parseFloat(venda.total_price.toString())
+        }));
+        const response = (0, pagination_1.createPaginatedResponse)(vendasComValoresNumericos, totalCount, req.pagination);
         res.json(response);
     }
     catch (error) {

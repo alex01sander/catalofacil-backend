@@ -60,7 +60,13 @@ router.get('/',
         prisma.cash_flow.count({ where })
       ]);
       
-      const response = createPaginatedResponse(fluxos, totalCount, req.pagination!);
+      // Converter amount de string para número
+      const fluxosComValorNumerico = fluxos.map(fluxo => ({
+        ...fluxo,
+        amount: parseFloat(fluxo.amount.toString())
+      }));
+      
+      const response = createPaginatedResponse(fluxosComValorNumerico, totalCount, req.pagination!);
       res.json(response);
     } catch (error) {
       console.error('Erro ao listar fluxo de caixa:', error);
