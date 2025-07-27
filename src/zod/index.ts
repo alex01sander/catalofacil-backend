@@ -168,9 +168,6 @@ export const ordersCreateInputSchema = z.object({
   total_amount: z.number(),
   status: z.string().optional().default('pending'),
   store_id: z.string().optional(),
-  payment_method: z.string().optional().default('dinheiro'),
-  payment_status: z.string().optional().default('pendente'),
-  notes: z.string().optional(),
 });
 
 export const ordersUpdateInputSchema = z.object({
@@ -182,9 +179,6 @@ export const ordersUpdateInputSchema = z.object({
   total_amount: z.number().optional(),
   status: z.string().optional(),
   store_id: z.string().optional(),
-  payment_method: z.string().optional(),
-  payment_status: z.string().optional(),
-  notes: z.string().optional(),
 });
 
 // Cash Flow Schema (adicionado para melhor tipagem)

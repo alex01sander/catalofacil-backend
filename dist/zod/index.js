@@ -153,9 +153,6 @@ exports.ordersCreateInputSchema = zod_1.z.object({
     total_amount: zod_1.z.number(),
     status: zod_1.z.string().optional().default('pending'),
     store_id: zod_1.z.string().optional(),
-    payment_method: zod_1.z.string().optional().default('dinheiro'),
-    payment_status: zod_1.z.string().optional().default('pendente'),
-    notes: zod_1.z.string().optional(),
 });
 exports.ordersUpdateInputSchema = zod_1.z.object({
     store_owner_id: zod_1.z.string().optional(),
@@ -166,9 +163,6 @@ exports.ordersUpdateInputSchema = zod_1.z.object({
     total_amount: zod_1.z.number().optional(),
     status: zod_1.z.string().optional(),
     store_id: zod_1.z.string().optional(),
-    payment_method: zod_1.z.string().optional(),
-    payment_status: zod_1.z.string().optional(),
-    notes: zod_1.z.string().optional(),
 });
 // Cash Flow Schema (adicionado para melhor tipagem)
 exports.cashFlowCreateInputSchema = zod_1.z.object({
