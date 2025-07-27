@@ -166,8 +166,11 @@ export const ordersCreateInputSchema = z.object({
   customer_email: z.string().optional(),
   customer_phone: z.string().optional(),
   total_amount: z.number(),
-  status: z.string().optional(),
+  status: z.string().optional().default('pending'),
   store_id: z.string().optional(),
+  payment_method: z.string().optional().default('dinheiro'),
+  payment_status: z.string().optional().default('pendente'),
+  notes: z.string().optional(),
 });
 
 export const ordersUpdateInputSchema = z.object({
@@ -179,4 +182,21 @@ export const ordersUpdateInputSchema = z.object({
   total_amount: z.number().optional(),
   status: z.string().optional(),
   store_id: z.string().optional(),
-}); 
+  payment_method: z.string().optional(),
+  payment_status: z.string().optional(),
+  notes: z.string().optional(),
+});
+
+// Cash Flow Schema (adicionado para melhor tipagem)
+export const cashFlowCreateInputSchema = z.object({
+  user_id: z.string(),
+  store_id: z.string().optional(),
+  type: z.enum(['entrada', 'saida']),
+  category: z.string(),
+  description: z.string(),
+  amount: z.number().positive('Valor deve ser positivo'),
+  date: z.date().optional().default(() => new Date()),
+  payment_method: z.string().optional().default('dinheiro'),
+});
+
+export const cashFlowUpdateInputSchema = cashFlowCreateInputSchema.partial(); 

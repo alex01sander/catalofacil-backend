@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ordersUpdateInputSchema = exports.ordersCreateInputSchema = exports.store_settingsUpdateInputSchema = exports.store_settingsCreateInputSchema = exports.expensesUpdateInputSchema = exports.expensesCreateInputSchema = exports.credit_accountsUpdateInputSchema = exports.credit_accountsCreateInputSchema = exports.customersUpdateInputSchema = exports.customersCreateInputSchema = exports.categoriesUpdateInputSchema = exports.categoriesCreateInputSchema = exports.credit_transactionsUpdateInputSchema = exports.credit_transactionsCreateInputSchema = exports.salesUpdateInputSchema = exports.salesCreateInputSchema = exports.productsUpdateInputSchema = exports.productsCreateInputSchema = void 0;
+exports.cashFlowUpdateInputSchema = exports.cashFlowCreateInputSchema = exports.ordersUpdateInputSchema = exports.ordersCreateInputSchema = exports.store_settingsUpdateInputSchema = exports.store_settingsCreateInputSchema = exports.expensesUpdateInputSchema = exports.expensesCreateInputSchema = exports.credit_accountsUpdateInputSchema = exports.credit_accountsCreateInputSchema = exports.customersUpdateInputSchema = exports.customersCreateInputSchema = exports.categoriesUpdateInputSchema = exports.categoriesCreateInputSchema = exports.credit_transactionsUpdateInputSchema = exports.credit_transactionsCreateInputSchema = exports.salesUpdateInputSchema = exports.salesCreateInputSchema = exports.productsUpdateInputSchema = exports.productsCreateInputSchema = void 0;
 const zod_1 = require("zod");
 /////////////////////////////////////////
 // SCHEMAS PRINCIPAIS
@@ -151,8 +151,11 @@ exports.ordersCreateInputSchema = zod_1.z.object({
     customer_email: zod_1.z.string().optional(),
     customer_phone: zod_1.z.string().optional(),
     total_amount: zod_1.z.number(),
-    status: zod_1.z.string().optional(),
+    status: zod_1.z.string().optional().default('pending'),
     store_id: zod_1.z.string().optional(),
+    payment_method: zod_1.z.string().optional().default('dinheiro'),
+    payment_status: zod_1.z.string().optional().default('pendente'),
+    notes: zod_1.z.string().optional(),
 });
 exports.ordersUpdateInputSchema = zod_1.z.object({
     store_owner_id: zod_1.z.string().optional(),
@@ -163,4 +166,19 @@ exports.ordersUpdateInputSchema = zod_1.z.object({
     total_amount: zod_1.z.number().optional(),
     status: zod_1.z.string().optional(),
     store_id: zod_1.z.string().optional(),
+    payment_method: zod_1.z.string().optional(),
+    payment_status: zod_1.z.string().optional(),
+    notes: zod_1.z.string().optional(),
 });
+// Cash Flow Schema (adicionado para melhor tipagem)
+exports.cashFlowCreateInputSchema = zod_1.z.object({
+    user_id: zod_1.z.string(),
+    store_id: zod_1.z.string().optional(),
+    type: zod_1.z.enum(['entrada', 'saida']),
+    category: zod_1.z.string(),
+    description: zod_1.z.string(),
+    amount: zod_1.z.number().positive('Valor deve ser positivo'),
+    date: zod_1.z.date().optional().default(() => new Date()),
+    payment_method: zod_1.z.string().optional().default('dinheiro'),
+});
+exports.cashFlowUpdateInputSchema = exports.cashFlowCreateInputSchema.partial();

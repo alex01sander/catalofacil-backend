@@ -101,6 +101,40 @@
 - [x] Backup strategy
 - [x] Connection limits
 
+## ✅ Melhorias no Sistema de Pedidos (IMPLEMENTADO)
+
+### 🔄 Processamento Automático de Pedidos Aceitos
+- [x] **Integração Financeira Completa**: Pedidos aceitos agora geram automaticamente:
+  - Registros na tabela `sales` para cada item do pedido
+  - Entradas de receita no `cash_flow`
+  - Controle automático de estoque (desconto)
+  - Gerenciamento de contas de crédito
+
+### 🛡️ Validações e Segurança
+- [x] **Validação de Estoque**: Verifica disponibilidade antes do processamento
+- [x] **Prevenção de Duplicação**: Sistema idempotente que evita processamento duplo
+- [x] **Controle de Acesso**: Apenas proprietários podem processar seus pedidos
+- [x] **Logs Detalhados**: Rastreamento completo de todas as operações
+
+### 🔧 Funcionalidades Adicionais
+- [x] **Reprocessamento Manual**: Rota `POST /orders/:id/reprocess` para casos especiais
+- [x] **Status de Processamento**: Endpoint `GET /orders/:id/processing-status` para auditoria
+- [x] **Transações Atômicas**: Uso de transações do Prisma para consistência
+
+### 📊 Status Suportados para Aceitação
+- `accepted`, `confirmed`, `aceito`, `confirmado`
+
+### 🚀 Como Usar
+1. **Aceitar Pedido**: `PUT /orders/:id` com `{ "status": "accepted" }`
+2. **Verificar Processamento**: `GET /orders/:id/processing-status`
+3. **Reprocessar se Necessário**: `POST /orders/:id/reprocess`
+
+### ⚠️ Observações Importantes
+- Pedidos só são processados quando mudam de `pending` para status aceito
+- Estoque insuficiente impede o processamento
+- Todas as operações são logadas para auditoria
+- Transações garantem consistência dos dados
+
 ## 🚀 Deploy Final
 
 ### ✅ Preparação
