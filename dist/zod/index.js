@@ -168,7 +168,14 @@ exports.ordersUpdateInputSchema = zod_1.z.object({
 exports.cashFlowCreateInputSchema = zod_1.z.object({
     user_id: zod_1.z.string(),
     store_id: zod_1.z.string().optional(),
-    type: zod_1.z.enum(['entrada', 'saida']),
+    type: zod_1.z.enum(['entrada', 'saida', 'income', 'expense']).transform((val) => {
+        // Converter para o formato interno do banco
+        if (val === 'income')
+            return 'entrada';
+        if (val === 'expense')
+            return 'saida';
+        return val;
+    }),
     category: zod_1.z.string(),
     description: zod_1.z.string(),
     amount: zod_1.z.number().positive('Valor deve ser positivo'),
