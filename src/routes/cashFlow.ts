@@ -75,42 +75,121 @@ router.get('/',
 });
 
 // Buscar fluxo de caixa por ID
-router.get('/:id', async (req, res) => {
-  const fluxo = await prisma.cash_flow.findUnique({ where: { id: req.params.id } });
-  if (!fluxo) return res.status(404).json({ error: 'Fluxo de caixa não encontrado' });
-  res.json(fluxo);
+router.get('/:id', authenticateJWT, async (req, res) => {
+  if (!req.user) return res.status(401).json({ error: 'Usuário não autenticado' });
+  
+  try {
+    const fluxo = await prisma.cash_flow.findFirst({ 
+      where: { 
+        id: req.params.id,
+        user_id: req.user.id // Garantir que pertence ao usuário
+      } 
+    });
+    if (!fluxo) return res.status(404).json({ error: 'Fluxo de caixa não encontrado' });
+    res.json(fluxo);
+  } catch (error) {
+    console.error('Erro ao buscar fluxo de caixa:', error);
+    res.status(500).json({ error: 'Erro interno do servidor' });
+  }
 });
 
 // Criar fluxo de caixa
-router.post('/', async (req, res) => {
+router.post('/', authenticateJWT, userRateLimit, async (req, res) => {
+  if (!req.user) return res.status(401).json({ error: 'Usuário não autenticado' });
+  
   try {
-    const novo = await prisma.cash_flow.create({ data: req.body });
+    // Importar schema Zod
+    const { cashFlowCreateInputSchema } = require('../zod');
+    
+    console.log('📝 [CashFlow] Payload recebido:', JSON.stringify(req.body, null, 2));
+    
+    // Validar dados com Zod
+    const parse = cashFlowCreateInputSchema.safeParse({
+      ...req.body,
+      user_id: req.user.id // Garantir que user_id seja do usuário autenticado
+    });
+    
+    if (!parse.success) {
+      console.error('❌ [CashFlow] Erro de validação:', parse.error.issues);
+      return res.status(400).json({ error: 'Dados inválidos', details: parse.error.issues });
+    }
+    
+    console.log('✅ [CashFlow] Dados validados:', parse.data);
+    
+    const novo = await prisma.cash_flow.create({ data: parse.data });
+    
+    // Limpar cache do usuário após criar fluxo
+    clearUserCache(req.user.id);
+    
+    console.log('✅ [CashFlow] Fluxo criado com sucesso:', novo.id);
     res.status(201).json(novo);
-  } catch (e) {
-    res.status(400).json({ error: 'Erro ao criar fluxo de caixa', details: e });
+  } catch (error) {
+    console.error('❌ [CashFlow] Erro ao criar fluxo:', error);
+    res.status(500).json({ 
+      error: 'Erro interno do servidor', 
+      details: error instanceof Error ? error.message : 'Erro desconhecido' 
+    });
   }
 });
 
 // Atualizar fluxo de caixa
-router.put('/:id', async (req, res) => {
+router.put('/:id', authenticateJWT, userRateLimit, async (req, res) => {
+  if (!req.user) return res.status(401).json({ error: 'Usuário não autenticado' });
+  
   try {
+    // Verificar se o fluxo pertence ao usuário
+    const existingFluxo = await prisma.cash_flow.findFirst({
+      where: { 
+        id: req.params.id,
+        user_id: req.user.id
+      }
+    });
+    
+    if (!existingFluxo) {
+      return res.status(404).json({ error: 'Fluxo de caixa não encontrado' });
+    }
+    
     const atualizado = await prisma.cash_flow.update({
       where: { id: req.params.id },
       data: req.body,
     });
+    
+    // Limpar cache do usuário após atualizar
+    clearUserCache(req.user.id);
+    
     res.json(atualizado);
-  } catch (e) {
-    res.status(400).json({ error: 'Erro ao atualizar fluxo de caixa', details: e });
+  } catch (error) {
+    console.error('Erro ao atualizar fluxo de caixa:', error);
+    res.status(500).json({ error: 'Erro interno do servidor' });
   }
 });
 
 // Deletar fluxo de caixa
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', authenticateJWT, userRateLimit, async (req, res) => {
+  if (!req.user) return res.status(401).json({ error: 'Usuário não autenticado' });
+  
   try {
+    // Verificar se o fluxo pertence ao usuário
+    const existingFluxo = await prisma.cash_flow.findFirst({
+      where: { 
+        id: req.params.id,
+        user_id: req.user.id
+      }
+    });
+    
+    if (!existingFluxo) {
+      return res.status(404).json({ error: 'Fluxo de caixa não encontrado' });
+    }
+    
     await prisma.cash_flow.delete({ where: { id: req.params.id } });
+    
+    // Limpar cache do usuário após deletar
+    clearUserCache(req.user.id);
+    
     res.status(204).send();
-  } catch (e) {
-    res.status(400).json({ error: 'Erro ao deletar fluxo de caixa', details: e });
+  } catch (error) {
+    console.error('Erro ao deletar fluxo de caixa:', error);
+    res.status(500).json({ error: 'Erro interno do servidor' });
   }
 });
 

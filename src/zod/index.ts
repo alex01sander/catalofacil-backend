@@ -185,7 +185,12 @@ export const ordersUpdateInputSchema = z.object({
 export const cashFlowCreateInputSchema = z.object({
   user_id: z.string(),
   store_id: z.string().optional(),
-  type: z.enum(['entrada', 'saida']),
+  type: z.enum(['entrada', 'saida', 'income', 'expense']).transform((val) => {
+    // Converter para o formato interno do banco
+    if (val === 'income') return 'entrada';
+    if (val === 'expense') return 'saida';
+    return val;
+  }),
   category: z.string(),
   description: z.string(),
   amount: z.number().positive('Valor deve ser positivo'),
