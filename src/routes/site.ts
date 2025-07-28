@@ -128,6 +128,8 @@ router.get('/public/:slug/products', async (req, res) => {
       name: true,
       description: true,
       price: true,
+      stock: true,
+      is_active: true,
       image: true,
       images: true,
       categories: {
@@ -168,6 +170,59 @@ router.get('/public/:slug/categories', async (req, res) => {
     }
   });
   res.json(categorias);
+});
+
+// Rota pública: buscar produto individual por ID
+router.get('/public/:slug/products/:id', async (req, res) => {
+  const parse = slugParamSchema.safeParse({ slug: req.params.slug });
+  if (!parse.success) {
+    return res.status(400).json({ error: 'Parâmetro inválido', details: parse.error.issues });
+  }
+  
+  const { slug } = req.params;
+  const { id } = req.params;
+  
+  console.log('=== DEBUG PRODUTO INDIVIDUAL PÚBLICO ===');
+  console.log('Slug solicitado:', slug);
+  console.log('ID do produto:', id);
+  
+  // Busca a loja pelo slug
+  const loja = await prisma.stores.findUnique({ where: { slug }, select: { id: true } });
+  if (!loja) return res.status(404).json({ error: 'Loja não encontrada' });
+  
+  // Busca o produto específico dessa loja
+  const produto = await prisma.products.findFirst({
+    where: {
+      id: id,
+      store_id: loja.id,
+      is_active: true
+    },
+    select: {
+      id: true,
+      name: true,
+      description: true,
+      price: true,
+      stock: true,
+      is_active: true,
+      image: true,
+      images: true,
+      categories: {
+        select: {
+          id: true,
+          name: true,
+          color: true
+        }
+      }
+    }
+  });
+  
+  if (!produto) {
+    return res.status(404).json({ error: 'Produto não encontrado ou não está ativo' });
+  }
+  
+  console.log('Produto encontrado:', produto);
+  
+  res.json(produto);
 });
 
 export default router; 
