@@ -117,12 +117,20 @@ exports.customersUpdateInputSchema = zod_1.z.object({
 });
 // Credit Accounts
 exports.credit_accountsCreateInputSchema = zod_1.z.object({
-    user_id: zod_1.z.string(),
+    user_id: zod_1.z.string().optional(), // Tornar opcional pois será definido pelo middleware
     store_id: zod_1.z.string().optional(),
     customer_name: zod_1.z.string().min(1, 'Nome do cliente é obrigatório'),
     customer_phone: zod_1.z.string().min(1, 'Telefone do cliente é obrigatório'),
     customer_address: zod_1.z.string().optional(),
-    total_debt: zod_1.z.number().optional().default(0),
+    total_debt: zod_1.z.union([
+        zod_1.z.number().optional().default(0),
+        zod_1.z.string().transform((val) => {
+            const num = parseFloat(val);
+            if (isNaN(num))
+                return 0;
+            return num;
+        }).optional().default(0)
+    ]),
     status: zod_1.z.string().optional().default('aguardando_pagamento'),
 });
 exports.credit_accountsUpdateInputSchema = zod_1.z.object({

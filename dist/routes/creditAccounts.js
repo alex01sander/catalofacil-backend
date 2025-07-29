@@ -109,18 +109,33 @@ router.get('/:id', auth_1.default, async (req, res) => {
 router.post('/', auth_1.default, rateLimiter_1.userRateLimit, async (req, res) => {
     if (!req.user)
         return res.status(401).json({ error: 'Usuário não autenticado' });
+    console.log('📝 [CreditAccounts] === INÍCIO DA REQUISIÇÃO ===');
+    console.log('📝 [CreditAccounts] Headers:', {
+        'content-type': req.headers['content-type'],
+        'authorization': req.headers.authorization ? 'Bearer ***' : 'Não fornecido'
+    });
     console.log('📝 [CreditAccounts] Payload recebido:', JSON.stringify(req.body, null, 2));
+    console.log('📝 [CreditAccounts] User ID:', req.user.id);
     try {
-        // Validar dados com Zod
-        const parse = zod_1.credit_accountsCreateInputSchema.safeParse({
+        // Preparar dados para validação
+        const dadosParaValidacao = {
             ...req.body,
             user_id: req.user.id
-        });
+        };
+        console.log('📝 [CreditAccounts] Dados para validação:', JSON.stringify(dadosParaValidacao, null, 2));
+        // Validar dados com Zod
+        const parse = zod_1.credit_accountsCreateInputSchema.safeParse(dadosParaValidacao);
         if (!parse.success) {
             console.error('❌ [CreditAccounts] Erro de validação:', parse.error.issues);
-            return res.status(400).json({ error: 'Dados inválidos', details: parse.error.issues });
+            console.error('❌ [CreditAccounts] Erro detalhado:', JSON.stringify(parse.error, null, 2));
+            return res.status(400).json({
+                error: 'Dados inválidos',
+                details: parse.error.issues,
+                receivedData: req.body,
+                validationErrors: parse.error.issues
+            });
         }
-        console.log('✅ [CreditAccounts] Dados validados:', parse.data);
+        console.log('✅ [CreditAccounts] Dados validados:', JSON.stringify(parse.data, null, 2));
         // Verificar se já existe cliente com este telefone
         const clienteExistente = await prisma_1.default.credit_accounts.findFirst({
             where: {
@@ -129,6 +144,7 @@ router.post('/', auth_1.default, rateLimiter_1.userRateLimit, async (req, res) =
             }
         });
         if (clienteExistente) {
+            console.log('❌ [CreditAccounts] Cliente já existe:', clienteExistente.id);
             return res.status(400).json({
                 error: 'Cliente já existe',
                 existingCustomer: {
@@ -138,10 +154,26 @@ router.post('/', auth_1.default, rateLimiter_1.userRateLimit, async (req, res) =
                 }
             });
         }
-        const novaConta = await prisma_1.default.credit_accounts.create({ data: parse.data });
+        // Verificar se os dados estão corretos antes de salvar
+        console.log('📝 [CreditAccounts] Verificando dados antes de salvar:', {
+            user_id: parse.data.user_id,
+            store_id: parse.data.store_id,
+            customer_name: parse.data.customer_name,
+            customer_phone: parse.data.customer_phone,
+            customer_address: parse.data.customer_address,
+            total_debt: parse.data.total_debt,
+            status: parse.data.status
+        });
+        // Garantir que user_id seja definido
+        const dadosParaCriar = {
+            ...parse.data,
+            user_id: req.user.id // Sempre usar o ID do usuário autenticado
+        };
+        const novaConta = await prisma_1.default.credit_accounts.create({ data: dadosParaCriar });
         // Limpar cache do usuário
         (0, cache_1.clearUserCache)(req.user.id);
         console.log('✅ [CreditAccounts] Conta criada com sucesso:', novaConta.id);
+        console.log('📝 [CreditAccounts] === FIM DA REQUISIÇÃO ===');
         res.status(201).json({
             ...novaConta,
             total_debt: parseFloat(novaConta.total_debt.toString())
@@ -149,9 +181,12 @@ router.post('/', auth_1.default, rateLimiter_1.userRateLimit, async (req, res) =
     }
     catch (error) {
         console.error('❌ [CreditAccounts] Erro ao criar conta:', error);
+        console.error('❌ [CreditAccounts] Stack trace:', error instanceof Error ? error.stack : 'Stack não disponível');
+        console.error('❌ [CreditAccounts] === FIM COM ERRO ===');
         res.status(500).json({
             error: 'Erro interno do servidor',
-            details: error instanceof Error ? error.message : 'Erro desconhecido'
+            details: error instanceof Error ? error.message : 'Erro desconhecido',
+            stack: process.env.NODE_ENV === 'development' && error instanceof Error ? error.stack : undefined
         });
     }
 });

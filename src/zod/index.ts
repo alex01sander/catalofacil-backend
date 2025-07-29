@@ -128,12 +128,19 @@ export const customersUpdateInputSchema = z.object({
 
 // Credit Accounts
 export const credit_accountsCreateInputSchema = z.object({
-  user_id: z.string(),
+  user_id: z.string().optional(), // Tornar opcional pois será definido pelo middleware
   store_id: z.string().optional(),
   customer_name: z.string().min(1, 'Nome do cliente é obrigatório'),
   customer_phone: z.string().min(1, 'Telefone do cliente é obrigatório'),
   customer_address: z.string().optional(),
-  total_debt: z.number().optional().default(0),
+  total_debt: z.union([
+    z.number().optional().default(0),
+    z.string().transform((val) => {
+      const num = parseFloat(val);
+      if (isNaN(num)) return 0;
+      return num;
+    }).optional().default(0)
+  ]),
   status: z.string().optional().default('aguardando_pagamento'),
 });
 
