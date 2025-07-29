@@ -185,6 +185,7 @@ app.use('/fluxo-caixa', cashFlow_1.default); // Alias em português
 app.use('/creditAccounts', creditAccounts_1.default);
 app.use('/credit-accounts', creditAccounts_1.default); // Alias com hífen
 app.use('/creditTransactions', creditTransactions_1.default);
+app.use('/credit-transactions', creditTransactions_1.default); // Alias com hífen
 app.use('/customers', customers_1.default);
 // Middleware para rotas não encontradas
 app.use('*', (req, res) => {

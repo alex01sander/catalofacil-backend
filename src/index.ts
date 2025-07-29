@@ -205,6 +205,7 @@ app.use('/fluxo-caixa', cashFlowRouter); // Alias em português
 app.use('/creditAccounts', creditAccountsRouter);
 app.use('/credit-accounts', creditAccountsRouter); // Alias com hífen
 app.use('/creditTransactions', creditTransactionsRouter);
+app.use('/credit-transactions', creditTransactionsRouter); // Alias com hífen
 app.use('/customers', customersRouter);
 
 // Middleware para rotas não encontradas
