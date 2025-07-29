@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.cashFlowUpdateInputSchema = exports.cashFlowCreateInputSchema = exports.ordersUpdateInputSchema = exports.ordersCreateInputSchema = exports.store_settingsUpdateInputSchema = exports.store_settingsCreateInputSchema = exports.expensesUpdateInputSchema = exports.expensesCreateInputSchema = exports.credit_accountsUpdateInputSchema = exports.credit_accountsCreateInputSchema = exports.customersUpdateInputSchema = exports.customersCreateInputSchema = exports.categoriesUpdateInputSchema = exports.categoriesCreateInputSchema = exports.credit_transactionsUpdateInputSchema = exports.credit_transactionsCreateInputSchema = exports.salesUpdateInputSchema = exports.salesCreateInputSchema = exports.productsUpdateInputSchema = exports.productsCreateInputSchema = void 0;
+exports.creditDebitWithInstallmentsSchema = exports.cashFlowUpdateInputSchema = exports.cashFlowCreateInputSchema = exports.ordersUpdateInputSchema = exports.ordersCreateInputSchema = exports.store_settingsUpdateInputSchema = exports.store_settingsCreateInputSchema = exports.expensesUpdateInputSchema = exports.expensesCreateInputSchema = exports.credit_accountsUpdateInputSchema = exports.credit_accountsCreateInputSchema = exports.customersUpdateInputSchema = exports.customersCreateInputSchema = exports.categoriesUpdateInputSchema = exports.categoriesCreateInputSchema = exports.credit_installmentsUpdateInputSchema = exports.credit_installmentsCreateInputSchema = exports.credit_transactionsUpdateInputSchema = exports.credit_transactionsCreateInputSchema = exports.salesUpdateInputSchema = exports.salesCreateInputSchema = exports.productsUpdateInputSchema = exports.productsCreateInputSchema = void 0;
 const zod_1 = require("zod");
 /////////////////////////////////////////
 // SCHEMAS PRINCIPAIS
@@ -31,18 +31,59 @@ exports.salesUpdateInputSchema = exports.salesCreateInputSchema.partial();
 exports.credit_transactionsCreateInputSchema = zod_1.z.object({
     credit_account_id: zod_1.z.string(),
     user_id: zod_1.z.string(),
-    type: zod_1.z.string(),
-    amount: zod_1.z.number(),
-    description: zod_1.z.string(),
-    date: zod_1.z.date(),
+    type: zod_1.z.enum(['debito', 'pagamento']),
+    amount: zod_1.z.union([
+        zod_1.z.number().positive('Valor deve ser positivo'),
+        zod_1.z.string().transform((val) => {
+            const num = parseFloat(val);
+            if (isNaN(num) || num <= 0) {
+                throw new Error('Valor deve ser um número positivo');
+            }
+            return num;
+        })
+    ]),
+    description: zod_1.z.string().optional(),
+    date: zod_1.z.union([
+        zod_1.z.date(),
+        zod_1.z.string().transform((val) => new Date(val))
+    ]).optional().default(() => new Date()),
 });
 exports.credit_transactionsUpdateInputSchema = zod_1.z.object({
     credit_account_id: zod_1.z.string().optional(),
     user_id: zod_1.z.string().optional(),
-    type: zod_1.z.string().optional(),
+    type: zod_1.z.enum(['debito', 'pagamento']).optional(),
     amount: zod_1.z.number().optional(),
     description: zod_1.z.string().optional(),
     date: zod_1.z.date().optional(),
+});
+// Credit Installments
+exports.credit_installmentsCreateInputSchema = zod_1.z.object({
+    transaction_id: zod_1.z.string(),
+    installment_number: zod_1.z.number().int().positive('Número da parcela deve ser positivo'),
+    due_date: zod_1.z.union([
+        zod_1.z.date(),
+        zod_1.z.string().transform((val) => new Date(val))
+    ]),
+    amount: zod_1.z.union([
+        zod_1.z.number().positive('Valor deve ser positivo'),
+        zod_1.z.string().transform((val) => {
+            const num = parseFloat(val);
+            if (isNaN(num) || num <= 0) {
+                throw new Error('Valor deve ser um número positivo');
+            }
+            return num;
+        })
+    ]),
+    status: zod_1.z.string().optional().default('pending'),
+    paid_at: zod_1.z.date().optional(),
+});
+exports.credit_installmentsUpdateInputSchema = zod_1.z.object({
+    transaction_id: zod_1.z.string().optional(),
+    installment_number: zod_1.z.number().optional(),
+    due_date: zod_1.z.date().optional(),
+    amount: zod_1.z.number().optional(),
+    status: zod_1.z.string().optional(),
+    paid_at: zod_1.z.date().optional(),
 });
 // Categories
 exports.categoriesCreateInputSchema = zod_1.z.object({
@@ -77,17 +118,19 @@ exports.customersUpdateInputSchema = zod_1.z.object({
 // Credit Accounts
 exports.credit_accountsCreateInputSchema = zod_1.z.object({
     user_id: zod_1.z.string(),
-    store_id: zod_1.z.string(),
-    customer_name: zod_1.z.string(),
-    customer_phone: zod_1.z.string(),
-    total_debt: zod_1.z.number().optional(),
-    status: zod_1.z.string().optional(),
+    store_id: zod_1.z.string().optional(),
+    customer_name: zod_1.z.string().min(1, 'Nome do cliente é obrigatório'),
+    customer_phone: zod_1.z.string().min(1, 'Telefone do cliente é obrigatório'),
+    customer_address: zod_1.z.string().optional(),
+    total_debt: zod_1.z.number().optional().default(0),
+    status: zod_1.z.string().optional().default('aguardando_pagamento'),
 });
 exports.credit_accountsUpdateInputSchema = zod_1.z.object({
     user_id: zod_1.z.string().optional(),
     store_id: zod_1.z.string().optional(),
     customer_name: zod_1.z.string().optional(),
     customer_phone: zod_1.z.string().optional(),
+    customer_address: zod_1.z.string().optional(),
     total_debt: zod_1.z.number().optional(),
     status: zod_1.z.string().optional(),
 });
@@ -195,3 +238,33 @@ exports.cashFlowCreateInputSchema = zod_1.z.object({
     payment_method: zod_1.z.string().optional().default('dinheiro'),
 });
 exports.cashFlowUpdateInputSchema = exports.cashFlowCreateInputSchema.partial();
+// Schema para criar débito com parcelamento
+exports.creditDebitWithInstallmentsSchema = zod_1.z.object({
+    // Dados do cliente (novo ou existente)
+    customer_name: zod_1.z.string().min(1, 'Nome do cliente é obrigatório'),
+    customer_phone: zod_1.z.string().min(1, 'Telefone do cliente é obrigatório'),
+    customer_address: zod_1.z.string().optional(),
+    is_new_customer: zod_1.z.boolean().default(true),
+    existing_customer_id: zod_1.z.string().optional(),
+    // Dados da transação
+    description: zod_1.z.string().min(1, 'Descrição é obrigatória'),
+    total_amount: zod_1.z.union([
+        zod_1.z.number().positive('Valor total deve ser positivo'),
+        zod_1.z.string().transform((val) => {
+            const num = parseFloat(val);
+            if (isNaN(num) || num <= 0) {
+                throw new Error('Valor total deve ser um número positivo');
+            }
+            return num;
+        })
+    ]),
+    // Dados do parcelamento
+    installments_count: zod_1.z.number().int().min(1, 'Número de parcelas deve ser pelo menos 1'),
+    frequency: zod_1.z.enum(['diaria', 'semanal', 'quinzenal', 'mensal']),
+    first_due_date: zod_1.z.union([
+        zod_1.z.date(),
+        zod_1.z.string().transform((val) => new Date(val))
+    ]),
+    // Observações
+    observations: zod_1.z.string().optional(),
+});

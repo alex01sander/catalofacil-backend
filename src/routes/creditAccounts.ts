@@ -2,85 +2,265 @@ import { Router } from 'express';
 import prisma from '../lib/prisma';
 import { credit_accountsCreateInputSchema, credit_accountsUpdateInputSchema } from '../zod';
 import authenticateJWT from '../middleware/auth';
+import { userRateLimit } from '../middleware/rateLimiter';
+import { paginationMiddleware, paginationHeaders, createPaginatedResponse, getPrismaQuery } from '../middleware/pagination';
+import { cacheMiddleware, clearUserCache, generateCacheKey } from '../lib/cache';
+import { z } from 'zod';
 
 const router = Router();
-// Listar todas as contas de crédito
-router.get('/', authenticateJWT, async (req, res) => {
-  const contas = await prisma.credit_accounts.findMany({ include: { credit_transactions: true } });
-  res.json(contas);
+const idParamSchema = z.object({ id: z.string().min(1, 'ID obrigatório') });
+
+// Listar contas de crédito do usuário
+router.get('/', 
+  authenticateJWT, 
+  userRateLimit,
+  paginationMiddleware,
+  paginationHeaders,
+  cacheMiddleware(300, (req) => generateCacheKey('credit-accounts', req.user.id, {
+    page: req.pagination?.page,
+    limit: req.pagination?.limit,
+    search: req.query.search,
+    status: req.query.status
+  })),
+  async (req, res) => {
+    if (!req.user) return res.status(401).json({ error: 'Usuário não autenticado' });
+    
+    try {
+      // Construir filtros
+      const where: any = { user_id: req.user.id };
+      
+      // Filtro por busca
+      if (req.query.search) {
+        where.OR = [
+          { customer_name: { contains: req.query.search as string, mode: 'insensitive' } },
+          { customer_phone: { contains: req.query.search as string, mode: 'insensitive' } }
+        ];
+      }
+      
+      // Filtro por status
+      if (req.query.status) {
+        where.status = req.query.status as string;
+      }
+      
+      // Query com paginação
+      const paginationQuery = getPrismaQuery(req.pagination!, 'created_at');
+      
+      // Buscar contas e contagem total em paralelo
+      const [contas, totalCount] = await Promise.all([
+        prisma.credit_accounts.findMany({
+          where,
+          include: {
+            credit_transactions: {
+              orderBy: { created_at: 'desc' },
+              take: 5 // Últimas 5 transações
+            }
+          },
+          ...paginationQuery
+        }),
+        prisma.credit_accounts.count({ where })
+      ]);
+      
+      // Converter total_debt de string para número
+      const contasComValorNumerico = contas.map(conta => ({
+        ...conta,
+        total_debt: parseFloat(conta.total_debt.toString())
+      }));
+      
+      const response = createPaginatedResponse(contasComValorNumerico, totalCount, req.pagination!);
+      res.json(response);
+    } catch (error) {
+      console.error('Erro ao listar contas de crédito:', error);
+      res.status(500).json({ error: 'Erro interno do servidor' });
+    }
 });
 
 // Buscar conta de crédito por ID
-router.get('/:id', async (req, res) => {
-  const conta = await prisma.credit_accounts.findUnique({
-    where: { id: req.params.id },
-    include: { credit_transactions: true }
-  });
-  if (!conta) return res.status(404).json({ error: 'Conta de crédito não encontrada' });
-  res.json(conta);
+router.get('/:id', authenticateJWT, async (req, res) => {
+  if (!req.user) return res.status(401).json({ error: 'Usuário não autenticado' });
+  
+  const parse = idParamSchema.safeParse(req.params);
+  if (!parse.success) {
+    return res.status(400).json({ error: 'Parâmetro inválido', details: parse.error.issues });
+  }
+  
+  try {
+    const conta = await prisma.credit_accounts.findFirst({
+      where: { 
+        id: req.params.id,
+        user_id: req.user.id
+      },
+      include: {
+        credit_transactions: {
+          include: {
+            credit_installments: {
+              orderBy: { due_date: 'asc' }
+            }
+          },
+          orderBy: { created_at: 'desc' }
+        }
+      }
+    });
+    
+    if (!conta) {
+      return res.status(404).json({ error: 'Conta de crédito não encontrada' });
+    }
+    
+    // Converter total_debt para número
+    const contaComValorNumerico = {
+      ...conta,
+      total_debt: parseFloat(conta.total_debt.toString())
+    };
+    
+    res.json(contaComValorNumerico);
+  } catch (error) {
+    console.error('Erro ao buscar conta de crédito:', error);
+    res.status(500).json({ error: 'Erro interno do servidor' });
+  }
 });
 
 // Criar conta de crédito
-router.post('/', async (req, res) => {
-  const parse = credit_accountsCreateInputSchema.safeParse(req.body);
-  if (!parse.success) {
-    return res.status(400).json({ error: 'Dados inválidos', details: parse.error.issues });
-  }
+router.post('/', authenticateJWT, userRateLimit, async (req, res) => {
+  if (!req.user) return res.status(401).json({ error: 'Usuário não autenticado' });
+  
+  console.log('📝 [CreditAccounts] Payload recebido:', JSON.stringify(req.body, null, 2));
+  
   try {
-    // Verifica se o usuário está autenticado
-    const user = (req as any).user;
-    if (!user || !user.id) {
-      return res.status(401).json({ error: 'Usuário não autenticado' });
-    }
-    // Monta o objeto de dados com os campos obrigatórios
-    const { customer_name, customer_phone } = req.body;
-    // Verifica duplicidade de telefone para o mesmo usuário
-    if (customer_phone) {
-      const existente = await prisma.credit_accounts.findFirst({
-        where: { customer_phone, user_id: user.id }
-      });
-      if (existente) {
-        return res.status(400).json({ error: 'Já existe um cliente com este telefone.' });
-      }
-    }
-    const nova = await prisma.credit_accounts.create({
-      data: {
-        user_id: user.id,
-        customer_name,
-        customer_phone,
-        status: 'aguardando_pagamento',
-      },
+    // Validar dados com Zod
+    const parse = credit_accountsCreateInputSchema.safeParse({
+      ...req.body,
+      user_id: req.user.id
     });
-    res.status(201).json(nova);
-  } catch (e) {
-    res.status(400).json({ error: 'Erro ao criar conta de crédito', details: e });
+    
+    if (!parse.success) {
+      console.error('❌ [CreditAccounts] Erro de validação:', parse.error.issues);
+      return res.status(400).json({ error: 'Dados inválidos', details: parse.error.issues });
+    }
+    
+    console.log('✅ [CreditAccounts] Dados validados:', parse.data);
+    
+    // Verificar se já existe cliente com este telefone
+    const clienteExistente = await prisma.credit_accounts.findFirst({
+      where: {
+        customer_phone: parse.data.customer_phone,
+        user_id: req.user.id
+      }
+    });
+    
+    if (clienteExistente) {
+      return res.status(400).json({ 
+        error: 'Cliente já existe', 
+        existingCustomer: {
+          id: clienteExistente.id,
+          name: clienteExistente.customer_name,
+          phone: clienteExistente.customer_phone
+        }
+      });
+    }
+    
+    const novaConta = await prisma.credit_accounts.create({ data: parse.data });
+    
+    // Limpar cache do usuário
+    clearUserCache(req.user.id);
+    
+    console.log('✅ [CreditAccounts] Conta criada com sucesso:', novaConta.id);
+    
+    res.status(201).json({
+      ...novaConta,
+      total_debt: parseFloat(novaConta.total_debt.toString())
+    });
+  } catch (error) {
+    console.error('❌ [CreditAccounts] Erro ao criar conta:', error);
+    res.status(500).json({ 
+      error: 'Erro interno do servidor', 
+      details: error instanceof Error ? error.message : 'Erro desconhecido' 
+    });
   }
 });
 
 // Atualizar conta de crédito
-router.put('/:id', async (req, res) => {
-  const parse = credit_accountsUpdateInputSchema.safeParse(req.body);
+router.put('/:id', authenticateJWT, userRateLimit, async (req, res) => {
+  if (!req.user) return res.status(401).json({ error: 'Usuário não autenticado' });
+  
+  const parse = idParamSchema.safeParse(req.params);
   if (!parse.success) {
-    return res.status(400).json({ error: 'Dados inválidos', details: parse.error.issues });
+    return res.status(400).json({ error: 'Parâmetro inválido', details: parse.error.issues });
   }
+  
+  const parseBody = credit_accountsUpdateInputSchema.safeParse(req.body);
+  if (!parseBody.success) {
+    return res.status(400).json({ error: 'Dados inválidos', details: parseBody.error.issues });
+  }
+  
   try {
-    const atualizada = await prisma.credit_accounts.update({
-      where: { id: req.params.id },
-      data: parse.data,
+    // Verificar se a conta pertence ao usuário
+    const contaExistente = await prisma.credit_accounts.findFirst({
+      where: { 
+        id: req.params.id,
+        user_id: req.user.id
+      }
     });
-    res.json(atualizada);
-  } catch (e) {
-    res.status(400).json({ error: 'Erro ao atualizar conta de crédito', details: e });
+    
+    if (!contaExistente) {
+      return res.status(404).json({ error: 'Conta de crédito não encontrada' });
+    }
+    
+    const contaAtualizada = await prisma.credit_accounts.update({
+      where: { id: req.params.id },
+      data: parseBody.data
+    });
+    
+    // Limpar cache do usuário
+    clearUserCache(req.user.id);
+    
+    res.json({
+      ...contaAtualizada,
+      total_debt: parseFloat(contaAtualizada.total_debt.toString())
+    });
+  } catch (error) {
+    console.error('Erro ao atualizar conta de crédito:', error);
+    res.status(500).json({ error: 'Erro interno do servidor' });
   }
 });
 
 // Deletar conta de crédito
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', authenticateJWT, userRateLimit, async (req, res) => {
+  if (!req.user) return res.status(401).json({ error: 'Usuário não autenticado' });
+  
+  const parse = idParamSchema.safeParse(req.params);
+  if (!parse.success) {
+    return res.status(400).json({ error: 'Parâmetro inválido', details: parse.error.issues });
+  }
+  
   try {
+    // Verificar se a conta pertence ao usuário
+    const contaExistente = await prisma.credit_accounts.findFirst({
+      where: { 
+        id: req.params.id,
+        user_id: req.user.id
+      }
+    });
+    
+    if (!contaExistente) {
+      return res.status(404).json({ error: 'Conta de crédito não encontrada' });
+    }
+    
+    // Verificar se há dívidas pendentes
+    if (parseFloat(contaExistente.total_debt.toString()) > 0) {
+      return res.status(400).json({ 
+        error: 'Não é possível deletar cliente com dívidas pendentes',
+        total_debt: parseFloat(contaExistente.total_debt.toString())
+      });
+    }
+    
     await prisma.credit_accounts.delete({ where: { id: req.params.id } });
+    
+    // Limpar cache do usuário
+    clearUserCache(req.user.id);
+    
     res.status(204).send();
-  } catch (e) {
-    res.status(400).json({ error: 'Erro ao deletar conta de crédito', details: e });
+  } catch (error) {
+    console.error('Erro ao deletar conta de crédito:', error);
+    res.status(500).json({ error: 'Erro interno do servidor' });
   }
 });
 

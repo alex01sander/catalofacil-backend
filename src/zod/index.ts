@@ -34,19 +34,62 @@ export const salesUpdateInputSchema = salesCreateInputSchema.partial();
 export const credit_transactionsCreateInputSchema = z.object({
   credit_account_id: z.string(),
   user_id: z.string(),
-  type: z.string(),
-  amount: z.number(),
-  description: z.string(),
-  date: z.date(),
+  type: z.enum(['debito', 'pagamento']),
+  amount: z.union([
+    z.number().positive('Valor deve ser positivo'),
+    z.string().transform((val) => {
+      const num = parseFloat(val);
+      if (isNaN(num) || num <= 0) {
+        throw new Error('Valor deve ser um número positivo');
+      }
+      return num;
+    })
+  ]),
+  description: z.string().optional(),
+  date: z.union([
+    z.date(),
+    z.string().transform((val) => new Date(val))
+  ]).optional().default(() => new Date()),
 });
 
 export const credit_transactionsUpdateInputSchema = z.object({
   credit_account_id: z.string().optional(),
   user_id: z.string().optional(),
-  type: z.string().optional(),
+  type: z.enum(['debito', 'pagamento']).optional(),
   amount: z.number().optional(),
   description: z.string().optional(),
   date: z.date().optional(),
+});
+
+// Credit Installments
+export const credit_installmentsCreateInputSchema = z.object({
+  transaction_id: z.string(),
+  installment_number: z.number().int().positive('Número da parcela deve ser positivo'),
+  due_date: z.union([
+    z.date(),
+    z.string().transform((val) => new Date(val))
+  ]),
+  amount: z.union([
+    z.number().positive('Valor deve ser positivo'),
+    z.string().transform((val) => {
+      const num = parseFloat(val);
+      if (isNaN(num) || num <= 0) {
+        throw new Error('Valor deve ser um número positivo');
+      }
+      return num;
+    })
+  ]),
+  status: z.string().optional().default('pending'),
+  paid_at: z.date().optional(),
+});
+
+export const credit_installmentsUpdateInputSchema = z.object({
+  transaction_id: z.string().optional(),
+  installment_number: z.number().optional(),
+  due_date: z.date().optional(),
+  amount: z.number().optional(),
+  status: z.string().optional(),
+  paid_at: z.date().optional(),
 });
 
 // Categories
@@ -86,11 +129,12 @@ export const customersUpdateInputSchema = z.object({
 // Credit Accounts
 export const credit_accountsCreateInputSchema = z.object({
   user_id: z.string(),
-  store_id: z.string(),
-  customer_name: z.string(),
-  customer_phone: z.string(),
-  total_debt: z.number().optional(),
-  status: z.string().optional(),
+  store_id: z.string().optional(),
+  customer_name: z.string().min(1, 'Nome do cliente é obrigatório'),
+  customer_phone: z.string().min(1, 'Telefone do cliente é obrigatório'),
+  customer_address: z.string().optional(),
+  total_debt: z.number().optional().default(0),
+  status: z.string().optional().default('aguardando_pagamento'),
 });
 
 export const credit_accountsUpdateInputSchema = z.object({
@@ -98,6 +142,7 @@ export const credit_accountsUpdateInputSchema = z.object({
   store_id: z.string().optional(),
   customer_name: z.string().optional(),
   customer_phone: z.string().optional(),
+  customer_address: z.string().optional(),
   total_debt: z.number().optional(),
   status: z.string().optional(),
 });
@@ -211,3 +256,37 @@ export const cashFlowCreateInputSchema = z.object({
 });
 
 export const cashFlowUpdateInputSchema = cashFlowCreateInputSchema.partial(); 
+
+// Schema para criar débito com parcelamento
+export const creditDebitWithInstallmentsSchema = z.object({
+  // Dados do cliente (novo ou existente)
+  customer_name: z.string().min(1, 'Nome do cliente é obrigatório'),
+  customer_phone: z.string().min(1, 'Telefone do cliente é obrigatório'),
+  customer_address: z.string().optional(),
+  is_new_customer: z.boolean().default(true),
+  existing_customer_id: z.string().optional(),
+  
+  // Dados da transação
+  description: z.string().min(1, 'Descrição é obrigatória'),
+  total_amount: z.union([
+    z.number().positive('Valor total deve ser positivo'),
+    z.string().transform((val) => {
+      const num = parseFloat(val);
+      if (isNaN(num) || num <= 0) {
+        throw new Error('Valor total deve ser um número positivo');
+      }
+      return num;
+    })
+  ]),
+  
+  // Dados do parcelamento
+  installments_count: z.number().int().min(1, 'Número de parcelas deve ser pelo menos 1'),
+  frequency: z.enum(['diaria', 'semanal', 'quinzenal', 'mensal']),
+  first_due_date: z.union([
+    z.date(),
+    z.string().transform((val) => new Date(val))
+  ]),
+  
+  // Observações
+  observations: z.string().optional(),
+}); 
