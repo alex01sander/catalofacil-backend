@@ -193,8 +193,20 @@ export const cashFlowCreateInputSchema = z.object({
   }),
   category: z.string(),
   description: z.string(),
-  amount: z.number().positive('Valor deve ser positivo'),
-  date: z.date().optional().default(() => new Date()),
+  amount: z.union([
+    z.number().positive('Valor deve ser positivo'),
+    z.string().transform((val) => {
+      const num = parseFloat(val);
+      if (isNaN(num) || num <= 0) {
+        throw new Error('Valor deve ser um número positivo');
+      }
+      return num;
+    })
+  ]),
+  date: z.union([
+    z.date(),
+    z.string().transform((val) => new Date(val))
+  ]).optional().default(() => new Date()),
   payment_method: z.string().optional().default('dinheiro'),
 });
 

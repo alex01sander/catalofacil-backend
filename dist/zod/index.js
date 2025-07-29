@@ -178,8 +178,20 @@ exports.cashFlowCreateInputSchema = zod_1.z.object({
     }),
     category: zod_1.z.string(),
     description: zod_1.z.string(),
-    amount: zod_1.z.number().positive('Valor deve ser positivo'),
-    date: zod_1.z.date().optional().default(() => new Date()),
+    amount: zod_1.z.union([
+        zod_1.z.number().positive('Valor deve ser positivo'),
+        zod_1.z.string().transform((val) => {
+            const num = parseFloat(val);
+            if (isNaN(num) || num <= 0) {
+                throw new Error('Valor deve ser um número positivo');
+            }
+            return num;
+        })
+    ]),
+    date: zod_1.z.union([
+        zod_1.z.date(),
+        zod_1.z.string().transform((val) => new Date(val))
+    ]).optional().default(() => new Date()),
     payment_method: zod_1.z.string().optional().default('dinheiro'),
 });
 exports.cashFlowUpdateInputSchema = exports.cashFlowCreateInputSchema.partial();

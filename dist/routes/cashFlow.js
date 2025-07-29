@@ -89,31 +89,60 @@ router.get('/:id', auth_1.default, async (req, res) => {
 router.post('/', auth_1.default, rateLimiter_1.userRateLimit, async (req, res) => {
     if (!req.user)
         return res.status(401).json({ error: 'Usuário não autenticado' });
+    console.log('📝 [CashFlow] === INÍCIO DA REQUISIÇÃO ===');
+    console.log('📝 [CashFlow] Headers:', {
+        'content-type': req.headers['content-type'],
+        'authorization': req.headers.authorization ? 'Bearer ***' : 'Não fornecido'
+    });
+    console.log('📝 [CashFlow] Payload recebido:', JSON.stringify(req.body, null, 2));
+    console.log('📝 [CashFlow] User ID:', req.user.id);
     try {
         // Importar schema Zod
         const { cashFlowCreateInputSchema } = require('../zod');
-        console.log('📝 [CashFlow] Payload recebido:', JSON.stringify(req.body, null, 2));
-        // Validar dados com Zod
-        const parse = cashFlowCreateInputSchema.safeParse({
+        // Preparar dados para validação
+        const dadosParaValidacao = {
             ...req.body,
             user_id: req.user.id // Garantir que user_id seja do usuário autenticado
-        });
+        };
+        console.log('📝 [CashFlow] Dados para validação:', JSON.stringify(dadosParaValidacao, null, 2));
+        // Validar dados com Zod
+        const parse = cashFlowCreateInputSchema.safeParse(dadosParaValidacao);
         if (!parse.success) {
             console.error('❌ [CashFlow] Erro de validação:', parse.error.issues);
-            return res.status(400).json({ error: 'Dados inválidos', details: parse.error.issues });
+            console.error('❌ [CashFlow] Erro detalhado:', JSON.stringify(parse.error, null, 2));
+            return res.status(400).json({
+                error: 'Dados inválidos',
+                details: parse.error.issues,
+                receivedData: req.body,
+                validationErrors: parse.error.issues
+            });
         }
-        console.log('✅ [CashFlow] Dados validados:', parse.data);
+        console.log('✅ [CashFlow] Dados validados:', JSON.stringify(parse.data, null, 2));
+        // Verificar se os dados estão corretos antes de salvar
+        console.log('📝 [CashFlow] Verificando dados antes de salvar:', {
+            user_id: parse.data.user_id,
+            type: parse.data.type,
+            category: parse.data.category,
+            description: parse.data.description,
+            amount: parse.data.amount,
+            date: parse.data.date,
+            payment_method: parse.data.payment_method
+        });
         const novo = await prisma_1.default.cash_flow.create({ data: parse.data });
         // Limpar cache do usuário após criar fluxo
         (0, cache_1.clearUserCache)(req.user.id);
         console.log('✅ [CashFlow] Fluxo criado com sucesso:', novo.id);
+        console.log('📝 [CashFlow] === FIM DA REQUISIÇÃO ===');
         res.status(201).json(novo);
     }
     catch (error) {
         console.error('❌ [CashFlow] Erro ao criar fluxo:', error);
+        console.error('❌ [CashFlow] Stack trace:', error instanceof Error ? error.stack : 'Stack não disponível');
+        console.error('❌ [CashFlow] === FIM COM ERRO ===');
         res.status(500).json({
             error: 'Erro interno do servidor',
-            details: error instanceof Error ? error.message : 'Erro desconhecido'
+            details: error instanceof Error ? error.message : 'Erro desconhecido',
+            stack: process.env.NODE_ENV === 'development' && error instanceof Error ? error.stack : undefined
         });
     }
 });
