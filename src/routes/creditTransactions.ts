@@ -405,18 +405,24 @@ async function processarDebitoComParcelamento(userId: string, data: any) {
   });
 }
 
-// Criar transação de crédito simples
+// Criar transação de crédito simples (Compatibilidade com Frontend)
 router.post('/', authenticateJWT, userRateLimit, async (req, res) => {
   if (!req.user) return res.status(401).json({ error: 'Usuário não autenticado' });
   
   console.log('📝 [CreditTransactions] Payload recebido:', JSON.stringify(req.body, null, 2));
   
   try {
-    // Validar dados com Zod
-    const parse = credit_transactionsCreateInputSchema.safeParse({
+    // Converter tipo do frontend para formato da API
+    const payloadConvertido = {
       ...req.body,
-      user_id: req.user.id
-    });
+      user_id: req.user.id,
+      type: req.body.type === 'payment' ? 'pagamento' : req.body.type
+    };
+    
+    console.log('🔄 [CreditTransactions] Payload convertido:', JSON.stringify(payloadConvertido, null, 2));
+    
+    // Validar dados com Zod
+    const parse = credit_transactionsCreateInputSchema.safeParse(payloadConvertido);
     
     if (!parse.success) {
       console.error('❌ [CreditTransactions] Erro de validação:', parse.error.issues);

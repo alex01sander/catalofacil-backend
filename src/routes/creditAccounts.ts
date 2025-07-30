@@ -304,4 +304,57 @@ router.delete('/:id', authenticateJWT, userRateLimit, async (req, res) => {
   }
 });
 
+// Buscar transações de um cliente específico
+router.get('/:id/transactions', authenticateJWT, userRateLimit, async (req, res) => {
+  if (!req.user) return res.status(401).json({ error: 'Usuário não autenticado' });
+  
+  const parse = idParamSchema.safeParse(req.params);
+  if (!parse.success) {
+    return res.status(400).json({ error: 'Parâmetro inválido', details: parse.error.issues });
+  }
+  
+  try {
+    // Verificar se a conta pertence ao usuário
+    const conta = await prisma.credit_accounts.findFirst({
+      where: { 
+        id: req.params.id,
+        user_id: req.user.id
+      }
+    });
+    
+    if (!conta) {
+      return res.status(404).json({ error: 'Conta de crédito não encontrada' });
+    }
+    
+    // Buscar transações da conta
+    const transacoes = await prisma.credit_transactions.findMany({
+      where: { 
+        credit_account_id: req.params.id,
+        user_id: req.user.id
+      },
+      include: {
+        credit_installments: {
+          orderBy: { due_date: 'asc' }
+        }
+      },
+      orderBy: { created_at: 'desc' }
+    });
+    
+    // Converter amounts para números
+    const transacoesComValorNumerico = transacoes.map(transacao => ({
+      ...transacao,
+      amount: parseFloat(transacao.amount.toString())
+    }));
+    
+    res.json({
+      success: true,
+      data: transacoesComValorNumerico,
+      count: transacoesComValorNumerico.length
+    });
+  } catch (error) {
+    console.error('Erro ao buscar transações do cliente:', error);
+    res.status(500).json({ error: 'Erro interno do servidor' });
+  }
+});
+
 export default router; 
