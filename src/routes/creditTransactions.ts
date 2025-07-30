@@ -159,108 +159,89 @@ router.get('/:id', authenticateJWT, async (req, res) => {
   }
 });
 
-// Criar débito com parcelamento (Nova Operação)
+// Criar débito com parcelamento (Compatibilidade com Frontend)
 router.post('/debit-with-installments', authenticateJWT, userRateLimit, async (req, res) => {
   if (!req.user) return res.status(401).json({ error: 'Usuário não autenticado' });
   
   console.log('📝 [CreditTransactions] Payload recebido:', JSON.stringify(req.body, null, 2));
   
   try {
-    // Validar dados com Zod
-    const parse = creditDebitWithInstallmentsSchema.safeParse(req.body);
+    // Processar diretamente o formato do frontend
+    const {
+      credit_account_id,
+      type,
+      amount,
+      description,
+      first_payment_date,
+      frequency,
+      installments,
+      observations = ''
+    } = req.body;
     
-    if (!parse.success) {
-      console.error('❌ [CreditTransactions] Erro de validação:', parse.error.issues);
-      return res.status(400).json({ error: 'Dados inválidos', details: parse.error.issues });
+    // Validar campos obrigatórios
+    if (!credit_account_id || type !== 'debt' || !amount || !description || !first_payment_date || !frequency || !installments) {
+      return res.status(400).json({ 
+        error: 'Dados inválidos', 
+        details: 'Campos obrigatórios: credit_account_id, type (debt), amount, description, first_payment_date, frequency, installments' 
+      });
     }
     
-    console.log('✅ [CreditTransactions] Dados validados:', parse.data);
-    
-    // Usar transação para garantir consistência
-    const resultado = await prisma.$transaction(async (tx) => {
-      let creditAccountId: string;
-      
-      // 1. Criar ou buscar conta de crédito
-      if (parse.data.is_new_customer) {
-        // Verificar se já existe cliente com este telefone
-        const clienteExistente = await tx.credit_accounts.findFirst({
-          where: {
-            customer_phone: parse.data.customer_phone,
-            user_id: req.user!.id
-          }
-        });
-        
-        if (clienteExistente) {
-          throw new Error('Cliente já existe com este telefone');
-        }
-        
-        // Criar novo cliente
-        const novaConta = await tx.credit_accounts.create({
-          data: {
-            user_id: req.user!.id,
-            customer_name: parse.data.customer_name,
-            customer_phone: parse.data.customer_phone,
-            customer_address: parse.data.customer_address,
-            total_debt: parse.data.total_amount
-          }
-        });
-        
-        creditAccountId = novaConta.id;
-        console.log('✅ [CreditTransactions] Novo cliente criado:', novaConta.id);
-      } else {
-        // Usar cliente existente
-        if (!parse.data.existing_customer_id) {
-          throw new Error('ID do cliente existente é obrigatório');
-        }
-        
-        const clienteExistente = await tx.credit_accounts.findFirst({
-          where: {
-            id: parse.data.existing_customer_id,
-            user_id: req.user!.id
-          }
-        });
-        
-        if (!clienteExistente) {
-          throw new Error('Cliente não encontrado');
-        }
-        
-        creditAccountId = clienteExistente.id;
-        
-        // Atualizar dívida total
-        await tx.credit_accounts.update({
-          where: { id: creditAccountId },
-          data: {
-            total_debt: {
-              increment: parse.data.total_amount
-            }
-          }
-        });
-        
-        console.log('✅ [CreditTransactions] Cliente existente atualizado:', creditAccountId);
+    // Buscar dados do cliente existente
+    const clienteExistente = await prisma.credit_accounts.findFirst({
+      where: {
+        id: credit_account_id,
+        user_id: req.user.id
       }
+    });
+    
+    if (!clienteExistente) {
+      return res.status(404).json({ error: 'Cliente não encontrado' });
+    }
+    
+    // Converter frequência
+    const frequencyMap: Record<string, string> = {
+      'monthly': 'mensal',
+      'weekly': 'semanal', 
+      'daily': 'diaria',
+      'biweekly': 'quinzenal'
+    };
+    
+    const frequencyConvertida = frequencyMap[frequency as string] || 'mensal';
+    
+    // Processar débito com parcelamento
+    const resultado = await prisma.$transaction(async (tx) => {
+      // Atualizar dívida total do cliente
+      await tx.credit_accounts.update({
+        where: { id: credit_account_id },
+        data: {
+          total_debt: {
+            increment: amount
+          }
+        }
+      });
       
-      // 2. Criar transação de débito
+      // Criar transação de débito
       const transacao = await tx.credit_transactions.create({
         data: {
-          credit_account_id: creditAccountId,
+          credit_account_id: credit_account_id,
           user_id: req.user!.id,
           type: 'debito',
-          amount: parse.data.total_amount,
-          description: parse.data.description,
-          date: parse.data.first_due_date
+          amount: amount,
+          description: description,
+          date: new Date(first_payment_date)
         }
       });
       
       console.log('✅ [CreditTransactions] Transação criada:', transacao.id);
       
-      // 3. Calcular e criar parcelas
+      // Calcular e criar parcelas
       const dueDates = calculateDueDates(
-        parse.data.first_due_date,
-        parse.data.installments_count,
-        parse.data.frequency
+        new Date(first_payment_date),
+        installments,
+        frequencyConvertida
       );
       
-      const valorParcela = parse.data.total_amount / parse.data.installments_count;
+      const valorParcela = amount / installments;
       
       const parcelas = await Promise.all(
         dueDates.map((dueDate, index) =>
@@ -281,7 +262,7 @@ router.post('/debit-with-installments', authenticateJWT, userRateLimit, async (r
       return {
         transacao,
         parcelas,
-        creditAccountId
+        creditAccountId: credit_account_id
       };
     });
     
@@ -306,12 +287,123 @@ router.post('/debit-with-installments', authenticateJWT, userRateLimit, async (r
     
   } catch (error) {
     console.error('❌ [CreditTransactions] Erro ao criar débito:', error);
-    res.status(500).json({ 
-      error: 'Erro interno do servidor', 
-      details: error instanceof Error ? error.message : 'Erro desconhecido' 
+    res.status(500).json({
+      error: 'Erro interno do servidor',
+      details: error instanceof Error ? error.message : 'Erro desconhecido'
     });
   }
 });
+
+// Função auxiliar para processar débito com parcelamento
+async function processarDebitoComParcelamento(userId: string, data: any) {
+  return await prisma.$transaction(async (tx) => {
+    let creditAccountId: string;
+    
+    // 1. Criar ou buscar conta de crédito
+    if (data.is_new_customer) {
+      // Verificar se já existe cliente com este telefone
+      const clienteExistente = await tx.credit_accounts.findFirst({
+        where: {
+          customer_phone: data.customer_phone,
+          user_id: userId
+        }
+      });
+      
+      if (clienteExistente) {
+        throw new Error('Cliente já existe com este telefone');
+      }
+      
+      // Criar novo cliente
+      const novaConta = await tx.credit_accounts.create({
+        data: {
+          user_id: userId,
+          customer_name: data.customer_name,
+          customer_phone: data.customer_phone,
+          customer_address: data.customer_address,
+          total_debt: data.total_amount
+        }
+      });
+      
+      creditAccountId = novaConta.id;
+      console.log('✅ [CreditTransactions] Novo cliente criado:', novaConta.id);
+    } else {
+      // Usar cliente existente
+      if (!data.existing_customer_id) {
+        throw new Error('ID do cliente existente é obrigatório');
+      }
+      
+      const clienteExistente = await tx.credit_accounts.findFirst({
+        where: {
+          id: data.existing_customer_id,
+          user_id: userId
+        }
+      });
+      
+      if (!clienteExistente) {
+        throw new Error('Cliente não encontrado');
+      }
+      
+      creditAccountId = clienteExistente.id;
+      
+      // Atualizar dívida total
+      await tx.credit_accounts.update({
+        where: { id: creditAccountId },
+        data: {
+          total_debt: {
+            increment: data.total_amount
+          }
+        }
+      });
+      
+      console.log('✅ [CreditTransactions] Cliente existente atualizado:', creditAccountId);
+    }
+    
+    // 2. Criar transação de débito
+    const transacao = await tx.credit_transactions.create({
+      data: {
+        credit_account_id: creditAccountId,
+        user_id: userId,
+        type: 'debito',
+        amount: data.total_amount,
+        description: data.description,
+        date: data.first_due_date
+      }
+    });
+    
+    console.log('✅ [CreditTransactions] Transação criada:', transacao.id);
+    
+    // 3. Calcular e criar parcelas
+    const dueDates = calculateDueDates(
+      data.first_due_date,
+      data.installments_count,
+      data.frequency
+    );
+    
+    const valorParcela = data.total_amount / data.installments_count;
+    
+    const parcelas = await Promise.all(
+      dueDates.map((dueDate, index) =>
+        tx.credit_installments.create({
+          data: {
+            transaction_id: transacao.id,
+            installment_number: index + 1,
+            due_date: dueDate,
+            amount: valorParcela,
+            status: 'pending'
+          }
+        })
+      )
+    );
+    
+    console.log('✅ [CreditTransactions] Parcelas criadas:', parcelas.length);
+    
+    return {
+      transacao,
+      parcelas,
+      creditAccountId
+    };
+  });
+}
 
 // Criar transação de crédito simples
 router.post('/', authenticateJWT, userRateLimit, async (req, res) => {
