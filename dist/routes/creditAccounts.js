@@ -302,11 +302,7 @@ router.get('/:id/transactions', auth_1.default, rateLimiter_1.userRateLimit, asy
             ...transacao,
             amount: parseFloat(transacao.amount.toString())
         }));
-        res.json({
-            success: true,
-            data: transacoesComValorNumerico,
-            count: transacoesComValorNumerico.length
-        });
+        res.json(transacoesComValorNumerico);
     }
     catch (error) {
         console.error('Erro ao buscar transações do cliente:', error);

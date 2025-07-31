@@ -346,11 +346,7 @@ router.get('/:id/transactions', authenticateJWT, userRateLimit, async (req, res)
       amount: parseFloat(transacao.amount.toString())
     }));
     
-    res.json({
-      success: true,
-      data: transacoesComValorNumerico,
-      count: transacoesComValorNumerico.length
-    });
+    res.json(transacoesComValorNumerico);
   } catch (error) {
     console.error('Erro ao buscar transações do cliente:', error);
     res.status(500).json({ error: 'Erro interno do servidor' });
