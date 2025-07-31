@@ -1,7 +1,7 @@
 import request from 'supertest';
 import { app } from '../../src/index';
 import prisma from '../../src/lib/prisma';
-import { generateToken } from '../utils';
+import jwt from 'jsonwebtoken';
 
 describe('Customers Routes', () => {
   let authToken: string;
@@ -18,7 +18,7 @@ describe('Customers Routes', () => {
       }
     });
     userId = user.id;
-    authToken = generateToken(user);
+    authToken = jwt.sign({ id: user.id, email: user.email }, process.env.JWT_SECRET || 'test-secret');
 
     // Criar loja de teste
     const store = await prisma.stores.create({
@@ -433,6 +433,144 @@ describe('Customers Routes', () => {
         .expect(400);
 
       expect(response.body.error).toBe('Dados inválidos');
+    });
+  });
+
+  describe('GET /customers/available-for-credit', () => {
+    let customerWithCreditId: string;
+
+    beforeEach(async () => {
+      // Criar cliente que terá crediário
+      const customerWithCredit = await prisma.customers.create({
+        data: {
+          store_owner_id: userId,
+          name: 'Cliente Com Crediário',
+          phone: '51988888888',
+          email: 'com-credito@test.com',
+          address: 'Rua Com Crediário, 456'
+        }
+      });
+      customerWithCreditId = customerWithCredit.id;
+
+      // Criar crediário para este cliente
+      await prisma.credit_accounts.create({
+        data: {
+          customer_name: 'Cliente Com Crediário',
+          customer_phone: '51988888888',
+          customer_address: 'Rua Com Crediário, 456',
+          total_debt: 0,
+          status: 'active',
+          user_id: userId
+        }
+      });
+    });
+
+    it('deve listar apenas clientes disponíveis para crediário', async () => {
+      const response = await request(app)
+        .get('/customers/available-for-credit')
+        .set('Authorization', `Bearer ${authToken}`);
+
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveProperty('available');
+      expect(response.body).toHaveProperty('total');
+      expect(response.body).toHaveProperty('message');
+      
+      // Deve incluir o cliente original (sem crediário)
+      const availableCustomers = response.body.available;
+      const originalCustomer = availableCustomers.find((c: any) => c.name === 'Cliente Teste');
+      expect(originalCustomer).toBeDefined();
+      
+      // NÃO deve incluir o cliente que já tem crediário
+      const customerWithCredit = availableCustomers.find((c: any) => c.id === customerWithCreditId);
+      expect(customerWithCredit).toBeUndefined();
+      
+      // Verificar se a contagem está correta
+      expect(response.body.total).toBe(availableCustomers.length);
+      expect(response.body.message).toBe('Clientes disponíveis para criar crediário');
+    });
+
+    it('deve retornar lista vazia se todos os clientes tiverem crediário', async () => {
+      // Criar crediário para o cliente original também
+      await prisma.credit_accounts.create({
+        data: {
+          customer_name: 'Cliente Teste',
+          customer_phone: '51999999999',
+          customer_address: 'Rua Teste, 123',
+          total_debt: 0,
+          status: 'active',
+          user_id: userId
+        }
+      });
+
+      const response = await request(app)
+        .get('/customers/available-for-credit')
+        .set('Authorization', `Bearer ${authToken}`);
+
+      expect(response.status).toBe(200);
+      expect(response.body.available).toHaveLength(0);
+      expect(response.body.total).toBe(0);
+    });
+
+    it('deve incluir clientes sem telefone na lista disponível', async () => {
+      // Criar cliente sem telefone
+      const customerWithoutPhone = await prisma.customers.create({
+        data: {
+          store_owner_id: userId,
+          name: 'Cliente Sem Telefone',
+          email: 'sem-telefone@test.com',
+          address: 'Rua Sem Telefone, 789'
+        }
+      });
+
+      const response = await request(app)
+        .get('/customers/available-for-credit')
+        .set('Authorization', `Bearer ${authToken}`);
+
+      expect(response.status).toBe(200);
+      
+      const availableCustomers = response.body.available;
+      const customerWithoutPhoneInList = availableCustomers.find((c: any) => c.id === customerWithoutPhone.id);
+      expect(customerWithoutPhoneInList).toBeDefined();
+      expect(customerWithoutPhoneInList.name).toBe('Cliente Sem Telefone');
+      expect(customerWithoutPhoneInList.phone).toBeNull();
+    });
+
+    it('deve retornar 401 sem token de autenticação', async () => {
+      const response = await request(app)
+        .get('/customers/available-for-credit');
+
+      expect(response.status).toBe(401);
+    });
+
+    it('deve retornar apenas clientes do usuário logado', async () => {
+      // Criar outro usuário
+      const otherUser = await prisma.users.create({
+        data: {
+          id: '550e8400-e29b-41d4-a716-446655440002',
+          email: 'other-user@test.com',
+          encrypted_password: 'hashedpassword'
+        }
+      });
+
+      // Criar cliente para outro usuário
+      await prisma.customers.create({
+        data: {
+          store_owner_id: otherUser.id,
+          name: 'Cliente Outro Usuário',
+          phone: '51977777777',
+          email: 'outro-usuario@test.com'
+        }
+      });
+
+      const response = await request(app)
+        .get('/customers/available-for-credit')
+        .set('Authorization', `Bearer ${authToken}`);
+
+      expect(response.status).toBe(200);
+      
+      const availableCustomers = response.body.available;
+      const otherUserCustomer = availableCustomers.find((c: any) => c.name === 'Cliente Outro Usuário');
+      expect(otherUserCustomer).toBeUndefined();
     });
   });
 }); 
