@@ -13,6 +13,50 @@ router.get('/', authenticateJWT, async (req, res) => {
   res.json(clientes);
 });
 
+// Listar clientes disponíveis para crediário (que não têm conta de crédito)
+router.get('/available-for-credit', authenticateJWT, async (req, res) => {
+  try {
+    // Buscar todos os clientes do usuário
+    const todosClientes = await prisma.customers.findMany({
+      where: { store_owner_id: req.user!.id },
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        email: true,
+        address: true,
+        created_at: true
+      }
+    });
+
+    // Buscar telefones que já têm conta de crédito
+    const contasExistentes = await prisma.credit_accounts.findMany({
+      where: {
+        customer_phone: {
+          in: todosClientes.map(c => c.phone).filter(Boolean) as string[]
+        }
+      },
+      select: { customer_phone: true }
+    });
+
+    const telefonesComCrediario = new Set(contasExistentes.map(c => c.customer_phone));
+
+    // Filtrar clientes que não têm crediário
+    const clientesDisponiveis = todosClientes.filter(cliente => 
+      !cliente.phone || !telefonesComCrediario.has(cliente.phone)
+    );
+
+    res.json({
+      available: clientesDisponiveis,
+      total: clientesDisponiveis.length,
+      message: 'Clientes disponíveis para criar crediário'
+    });
+  } catch (error) {
+    console.error('Erro ao buscar clientes disponíveis:', error);
+    res.status(500).json({ error: 'Erro interno do servidor' });
+  }
+});
+
 // Buscar cliente por ID
 router.get('/:id', authenticateJWT, async (req, res) => {
   const parse = idParamSchema.safeParse(req.params);

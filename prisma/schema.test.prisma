@@ -94,6 +94,7 @@ model controller_admins {
 
 model credit_accounts {
   id                String   @id @default(uuid())
+  customer_id       String?  // Relacionamento com customers
   customer_phone    String   @unique
   customer_name     String
   total_debt        Float    @default(0)
@@ -102,6 +103,7 @@ model credit_accounts {
   created_at        DateTime @default(now())
   updated_at        DateTime @default(now())
   credit_transactions credit_transactions[]
+  customers         customers? @relation(fields: [customer_id], references: [id], onDelete: SetNull)
 }
 
 model credit_transactions {
@@ -130,6 +132,7 @@ model customers {
   stores         stores?   @relation(fields: [store_id], references: [id], onDelete: Cascade)
   users          users     @relation(fields: [store_owner_id], references: [id], onDelete: Cascade)
   orders         orders[]
+  credit_accounts credit_accounts[]
 }
 
 model domain_owners {
