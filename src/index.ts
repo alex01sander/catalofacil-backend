@@ -4,6 +4,7 @@ import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
+import path from 'path';
 import prisma from './lib/prisma';
 import productsRouter from './routes/products';
 import authRouter from './routes/auth';
@@ -99,6 +100,12 @@ app.use(cors(corsOptions));
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
+
+// Servir arquivos estáticos
+app.use('/assets', express.static(path.join(__dirname, '../dist/assets')));
+app.use('/assets', express.static(path.join(__dirname, '../public/assets')));
+app.use(express.static(path.join(__dirname, '../dist')));
+app.use(express.static(path.join(__dirname, '../public')));
 
 // Middleware de logging seguro
 app.use((req: Request, res: Response, next: NextFunction) => {
@@ -213,6 +220,42 @@ app.use('/customers', customersRouter);
 
 // Middleware para rotas não encontradas
 app.use('*', (req: Request, res: Response) => {
+  // Não capturar requisições de arquivos estáticos
+  if (req.path.startsWith('/assets/') || 
+      req.path.includes('.js') || 
+      req.path.includes('.css') || 
+      req.path.includes('.png') || 
+      req.path.includes('.jpg') || 
+      req.path.includes('.ico') ||
+      req.path.includes('.svg')) {
+    return res.status(404).send('File not found');
+  }
+  
+  // Se não for uma rota da API, tentar servir o frontend
+  if (!req.path.startsWith('/api/') && 
+      !req.path.startsWith('/auth/') && 
+      !req.path.startsWith('/products/') && 
+      !req.path.startsWith('/customers/') &&
+      !req.path.startsWith('/orders/') &&
+      !req.path.startsWith('/sales/') &&
+      !req.path.startsWith('/categories/') &&
+      !req.path.startsWith('/stores/') &&
+      !req.path.startsWith('/health') &&
+      !req.path.startsWith('/cache-stats') &&
+      req.path !== '/' &&
+      req.path !== '/health') {
+    
+    // Tentar servir o index.html do frontend
+    const indexPath = path.join(__dirname, '../dist/index.html');
+    const publicIndexPath = path.join(__dirname, '../public/index.html');
+    
+    if (require('fs').existsSync(indexPath)) {
+      return res.sendFile(indexPath);
+    } else if (require('fs').existsSync(publicIndexPath)) {
+      return res.sendFile(publicIndexPath);
+    }
+  }
+  
   res.status(404).json({ error: 'Rota não encontrada' });
 });
 
