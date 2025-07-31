@@ -1,0 +1,374 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
+  binaryTargets   = ["native", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./test.db"
+}
+
+model users {
+  id                          String             @id @default(uuid())
+  aud                         String?
+  role                        String?
+  email                       String?            @unique
+  encrypted_password          String?
+  email_confirmed_at          DateTime?
+  invited_at                  DateTime?
+  confirmation_token          String?
+  confirmation_sent_at        DateTime?
+  recovery_token              String?
+  recovery_sent_at            DateTime?
+  email_change_token_new      String?
+  email_change                String?
+  email_change_sent_at        DateTime?
+  last_sign_in_at             DateTime?
+  raw_app_meta_data           String?
+  raw_user_meta_data          String?
+  is_super_admin              Boolean?
+  created_at                  DateTime?
+  updated_at                  DateTime?
+  phone                       String?            @unique
+  phone_confirmed_at          DateTime?
+  phone_change                String?
+  phone_change_token          String?
+  phone_change_sent_at        DateTime?
+  confirmed_at                DateTime?
+  email_change_token_current  String?
+  email_change_confirm_status Int?
+  banned_until                DateTime?
+  reauthentication_token      String?
+  reauthentication_sent_at    DateTime?
+  is_sso_user                 Boolean            @default(false)
+  deleted_at                  DateTime?
+  is_anonymous                Boolean            @default(false)
+  categories                  categories[]
+  controller_admins           controller_admins?
+  customers                   customers[]
+  domain_owners               domain_owners[]
+  orders                      orders[]
+  products                    products[]
+  profiles                    profiles?
+  store_settings              store_settings?
+  stores                      stores[]
+}
+
+model cash_flow {
+  id             String   @id @default(uuid())
+  user_id        String
+  store_id       String?
+  type           String
+  category       String
+  description    String
+  amount         Float
+  date           DateTime @default(now())
+  payment_method String?  @default("cash")
+  created_at     DateTime @default(now())
+  updated_at     DateTime @default(now())
+}
+
+model categories {
+  id         String     @id @default(uuid())
+  user_id    String
+  name       String
+  color      String?    @default("#8B5CF6")
+  image      String?
+  created_at DateTime?  @default(now())
+  updated_at DateTime?  @default(now())
+  store_id   String?
+  stores     stores?    @relation(fields: [store_id], references: [id], onDelete: Cascade)
+  users      users      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  products   products[]
+}
+
+model controller_admins {
+  id         String   @id @default(uuid())
+  user_id    String   @unique
+  email      String   @unique
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now())
+  users      users    @relation(fields: [user_id], references: [id], onDelete: NoAction)
+}
+
+model credit_accounts {
+  id                String   @id @default(uuid())
+  customer_phone    String   @unique
+  customer_name     String
+  total_debt        Float    @default(0)
+  credit_limit      Float    @default(0)
+  status            String   @default("active")
+  created_at        DateTime @default(now())
+  updated_at        DateTime @default(now())
+  credit_transactions credit_transactions[]
+}
+
+model credit_transactions {
+  id              String   @id @default(uuid())
+  credit_account_id String
+  type            String
+  amount          Float
+  description     String
+  due_date        DateTime?
+  paid_date       DateTime?
+  status          String   @default("pending")
+  created_at      DateTime @default(now())
+  updated_at      DateTime @default(now())
+  credit_accounts credit_accounts @relation(fields: [credit_account_id], references: [id], onDelete: Cascade)
+}
+
+model customers {
+  id             String    @id @default(uuid())
+  store_owner_id String
+  name           String
+  email          String?
+  phone          String?
+  address        String?
+  created_at     DateTime? @default(now())
+  store_id       String?
+  stores         stores?   @relation(fields: [store_id], references: [id], onDelete: Cascade)
+  users          users     @relation(fields: [store_owner_id], references: [id], onDelete: Cascade)
+  orders         orders[]
+}
+
+model domain_owners {
+  id          String    @id @default(uuid())
+  domain      String    @unique
+  user_id     String
+  created_at  DateTime? @default(now())
+  updated_at  DateTime? @default(now())
+  domain_type String    @default("domain")
+  users       users     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+}
+
+model expenses {
+  id                  String    @id @default(uuid())
+  user_id             String
+  store_id            String?
+  name                String
+  category            String
+  type                String
+  amount              Float
+  due_date            DateTime?
+  is_recurring        Boolean?  @default(false)
+  recurring_frequency String?
+  status              String?   @default("pending")
+  paid_date           DateTime?
+  created_at          DateTime  @default(now())
+  updated_at          DateTime  @default(now())
+}
+
+model order_items {
+  id          String    @id @default(uuid())
+  order_id    String
+  product_id  String
+  quantity    Int       @default(1)
+  unit_price  Float
+  total_price Float
+  created_at  DateTime? @default(now())
+  orders      orders    @relation(fields: [order_id], references: [id], onDelete: Cascade)
+  products    products  @relation(fields: [product_id], references: [id], onDelete: Cascade)
+}
+
+model orders {
+  id             String        @id @default(uuid())
+  store_owner_id String
+  customer_id    String?
+  customer_name  String
+  customer_email String?
+  customer_phone String?
+  total_amount   Float         @default(0)
+  status         String?       @default("pending")
+  created_at     DateTime?     @default(now())
+  updated_at     DateTime?     @default(now())
+  store_id       String?
+  order_items    order_items[]
+  customers      customers?    @relation(fields: [customer_id], references: [id])
+  stores         stores?       @relation(fields: [store_id], references: [id], onDelete: Cascade)
+  users          users         @relation(fields: [store_owner_id], references: [id], onDelete: Cascade)
+}
+
+model product_costs {
+  id              String   @id @default(uuid())
+  user_id         String
+  store_id        String?
+  product_name    String
+  cost_price      Float
+  quantity        Int      @default(1)
+  date            DateTime @default(now())
+  created_at      DateTime @default(now())
+  updated_at      DateTime @default(now())
+}
+
+model products {
+  id          String    @id @default(uuid())
+  name        String
+  description String?
+  price       Float
+  stock       Int       @default(0)
+  image_url   String?
+  image       String?
+  is_active   Boolean   @default(true)
+  user_id     String
+  store_id    String?
+  category_id String?
+  created_at  DateTime? @default(now())
+  updated_at  DateTime? @default(now())
+  categories  categories? @relation(fields: [category_id], references: [id], onDelete: SetNull)
+  stores      stores?     @relation(fields: [store_id], references: [id], onDelete: Cascade)
+  users       users       @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  order_items order_items[]
+}
+
+model profiles {
+  id         String    @id @default(uuid())
+  email      String
+  full_name  String?
+  created_at DateTime? @default(now())
+  updated_at DateTime? @default(now())
+  users      users     @relation(fields: [id], references: [id], onDelete: Cascade)
+}
+
+model sales {
+  id           String   @id @default(uuid())
+  user_id      String
+  product_name String
+  quantity     Int      @default(1)
+  unit_price   Float
+  total_price  Float
+  sale_date    DateTime
+  status       String   @default("completed")
+  created_at   DateTime @default(now())
+  updated_at   DateTime @default(now())
+  store_id     String?
+  stores       stores?  @relation(fields: [store_id], references: [id], onDelete: Cascade)
+}
+
+model store_settings {
+  id                  String    @id @default(uuid())
+  user_id             String    @unique
+  store_name          String    @default("Minha Loja")
+  store_description   String?   @default("Catálogo de produtos")
+  mobile_logo         String?
+  desktop_banner      String?
+  mobile_banner_color String?   @default("from-green-400 via-green-500 to-green-600")
+  mobile_banner_image String?
+  created_at          DateTime? @default(now())
+  updated_at          DateTime? @default(now())
+  store_subtitle      String?   @default("Produtos Incríveis")
+  instagram_url       String?   @default("https://instagram.com/")
+  whatsapp_number     String?   @default("5511999999999")
+  users               users     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+}
+
+model stores {
+  id              String       @id @default(uuid())
+  name            String
+  slug            String       @unique
+  domain          String?      @unique
+  user_id         String
+  description     String?
+  logo_url        String?
+  banner_url      String?
+  whatsapp_number String?
+  instagram_url   String?
+  theme_color     String?      @default("#2980B9")
+  created_at      DateTime?    @default(now())
+  updated_at      DateTime?    @default(now())
+  categories      categories[]
+  customers       customers[]
+  orders          orders[]
+  products        products[]
+  sales           sales[]
+  users           users        @relation(fields: [user_id], references: [id], onDelete: Cascade)
+}
+
+model sso_providers {
+  id          String   @id @default(uuid())
+  name        String
+  provider    String
+  client_id   String
+  client_secret String
+  created_at  DateTime @default(now())
+  updated_at  DateTime @default(now())
+}
+
+model saml_providers {
+  id          String   @id @default(uuid())
+  name        String
+  provider    String
+  client_id   String
+  client_secret String
+  created_at  DateTime @default(now())
+  updated_at  DateTime @default(now())
+}
+
+model sso_domains {
+  id          String   @id @default(uuid())
+  name        String
+  domain      String
+  created_at  DateTime @default(now())
+  updated_at  DateTime @default(now())
+}
+
+model flow_state {
+  id          String   @id @default(uuid())
+  state       String
+  created_at  DateTime @default(now())
+  updated_at  DateTime @default(now())
+}
+
+model instances {
+  id          String   @id @default(uuid())
+  name        String
+  created_at  DateTime @default(now())
+  updated_at  DateTime @default(now())
+}
+
+model mfa_challenges {
+  id          String   @id @default(uuid())
+  user_id     String
+  challenge   String
+  created_at  DateTime @default(now())
+  updated_at  DateTime @default(now())
+}
+
+model saml_relay_states {
+  id          String   @id @default(uuid())
+  state       String
+  created_at  DateTime @default(now())
+  updated_at  DateTime @default(now())
+}
+
+model sessions {
+  id          String   @id @default(uuid())
+  user_id     String
+  token       String
+  created_at  DateTime @default(now())
+  updated_at  DateTime @default(now())
+}
+
+model mfa_amr_claims {
+  id          String   @id @default(uuid())
+  user_id     String
+  claim       String
+  created_at  DateTime @default(now())
+  updated_at  DateTime @default(now())
+}
+
+model mfa_factors {
+  id          String   @id @default(uuid())
+  user_id     String
+  factor_type String
+  created_at  DateTime @default(now())
+  updated_at  DateTime @default(now())
+}
+
+model identities {
+  id          String   @id @default(uuid())
+  user_id     String
+  provider    String
+  created_at  DateTime @default(now())
+  updated_at  DateTime @default(now())
+} 

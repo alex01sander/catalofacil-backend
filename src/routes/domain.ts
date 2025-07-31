@@ -9,13 +9,13 @@ router.post('/', authenticateJWT, async (req, res) => {
   const { slug } = req.body;
   if (!slug) return res.status(400).json({ error: 'Slug é obrigatório' });
   // Verifica se já existe domínio com esse slug
-  const exists = await prisma.domain.findUnique({ where: { slug } });
+  const exists = await prisma.domain_owners.findUnique({ where: { domain: slug } });
   if (exists) return res.status(409).json({ error: 'Slug já está em uso' });
   // Cria domínio
-  const domain = await prisma.domain.create({
+  const domain = await prisma.domain_owners.create({
     data: {
-      slug,
-      userId: req.user.id
+      domain: slug,
+      user_id: req.user.id
     }
   });
   res.json(domain);

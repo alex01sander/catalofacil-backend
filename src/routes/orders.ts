@@ -103,8 +103,7 @@ async function processOrderAcceptance(orderId: string, userId: string) {
         // Verificar se já existe conta de crédito para este cliente
         let contaCredito = await tx.credit_accounts.findFirst({
           where: {
-            customer_phone: pedido.customer_phone,
-            user_id: userId
+            customer_phone: pedido.customer_phone
           }
         });
 
@@ -112,12 +111,10 @@ async function processOrderAcceptance(orderId: string, userId: string) {
         if (!contaCredito) {
           contaCredito = await tx.credit_accounts.create({
             data: {
-              user_id: userId,
-              store_id: pedido.store_id,
               customer_name: pedido.customer_name,
               customer_phone: pedido.customer_phone,
               total_debt: 0,
-              status: 'ativo'
+              status: 'active'
             }
           });
         }
@@ -127,11 +124,10 @@ async function processOrderAcceptance(orderId: string, userId: string) {
         await tx.credit_transactions.create({
           data: {
             credit_account_id: contaCredito.id,
-            user_id: userId,
-            type: 'pagamento',
+            type: 'payment',
             amount: pedido.total_amount,
             description: `Pagamento - Pedido #${pedido.id.substring(0, 8)}`,
-            date: new Date()
+            due_date: new Date()
           }
         });
 
@@ -166,8 +162,7 @@ router.get('/', authenticateJWT, async (req, res) => {
                 name: true,
                 description: true,
                 price: true,
-                image: true,
-                images: true
+                image: true
               }
             }
           }
@@ -195,7 +190,7 @@ router.get('/', authenticateJWT, async (req, res) => {
     
     // Log para debug
     console.log(`📊 Retornando ${pedidos.length} pedidos para o frontend`);
-    console.log(`🔍 Primeiro pedido tem ${pedidos[0]?.order_items?.length || 0} itens`);
+    console.log(`🔍 Primeiro pedido tem ${pedidos[0] ? 'itens' : '0'} itens`);
     
     res.json(pedidos);
   } catch (error) {
@@ -227,7 +222,7 @@ router.get('/:id', authenticateJWT, async (req, res) => {
                 description: true,
                 price: true,
                 image: true,
-                images: true,
+
                 stock: true
               }
             }
@@ -319,7 +314,6 @@ router.get('/:id/processing-status', authenticateJWT, async (req, res) => {
     // Verificar transações de crédito relacionadas
     const transacoesCredito = await prisma.credit_transactions.findMany({
       where: {
-        user_id: req.user.id,
         description: {
           contains: `Pedido #${pedido.id.substring(0, 8)}`
         }
@@ -328,7 +322,7 @@ router.get('/:id/processing-status', authenticateJWT, async (req, res) => {
         id: true,
         type: true,
         amount: true,
-        date: true,
+        due_date: true,
         description: true
       }
     });

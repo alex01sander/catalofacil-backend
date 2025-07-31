@@ -44,6 +44,9 @@ import type { CorsOptionsDelegate, CorsRequest } from 'cors';
 
 const app = express();
 
+// Exportar app para testes
+export { app };
+
 // Configuração para confiar no proxy do Render/Vercel
 app.set('trust proxy', 1);
 

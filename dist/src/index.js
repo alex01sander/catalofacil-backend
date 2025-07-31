@@ -1,0 +1,224 @@
+"use strict";
+// src/index.ts
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.app = void 0;
+const express_1 = __importDefault(require("express"));
+const cors_1 = __importDefault(require("cors"));
+const helmet_1 = __importDefault(require("helmet"));
+const prisma_1 = __importDefault(require("./lib/prisma"));
+const products_1 = __importDefault(require("./routes/products"));
+const auth_1 = __importDefault(require("./routes/auth"));
+const site_1 = __importDefault(require("./routes/site"));
+const domain_1 = __importDefault(require("./routes/domain"));
+const stores_1 = __importDefault(require("./routes/stores"));
+const ssoProviders_1 = __importDefault(require("./routes/ssoProviders"));
+const samlProviders_1 = __importDefault(require("./routes/samlProviders"));
+const ssoDomains_1 = __importDefault(require("./routes/ssoDomains"));
+const flowState_1 = __importDefault(require("./routes/flowState"));
+const users_1 = __importDefault(require("./routes/users"));
+const categories_1 = __importDefault(require("./routes/categories"));
+const instances_1 = __importDefault(require("./routes/instances"));
+const profiles_1 = __importDefault(require("./routes/profiles"));
+const mfaChallenges_1 = __importDefault(require("./routes/mfaChallenges"));
+const samlRelayStates_1 = __importDefault(require("./routes/samlRelayStates"));
+const codeChallengeMethod_1 = __importDefault(require("./routes/codeChallengeMethod"));
+const controllerAdmins_1 = __importDefault(require("./routes/controllerAdmins"));
+const sessions_1 = __importDefault(require("./routes/sessions"));
+const storeSettings_1 = __importDefault(require("./routes/storeSettings"));
+const mfaAmrClaims_1 = __importDefault(require("./routes/mfaAmrClaims"));
+const mfaFactors_1 = __importDefault(require("./routes/mfaFactors"));
+const expenses_1 = __importDefault(require("./routes/expenses"));
+const domainOwners_1 = __importDefault(require("./routes/domainOwners"));
+const identities_1 = __importDefault(require("./routes/identities"));
+const orders_1 = __importDefault(require("./routes/orders"));
+const sales_1 = __importDefault(require("./routes/sales"));
+const cashFlow_1 = __importDefault(require("./routes/cashFlow"));
+const creditAccounts_1 = __importDefault(require("./routes/creditAccounts"));
+const creditTransactions_1 = __importDefault(require("./routes/creditTransactions"));
+const customers_1 = __importDefault(require("./routes/customers"));
+// Importar middlewares de otimização
+const rateLimiter_1 = require("./middleware/rateLimiter");
+const cache_1 = require("./lib/cache");
+const app = (0, express_1.default)();
+exports.app = app;
+// Configuração para confiar no proxy do Render/Vercel
+app.set('trust proxy', 1);
+// Verificação de variáveis de ambiente obrigatórias
+const requiredEnv = ['DATABASE_URL', 'JWT_SECRET'];
+const missingEnv = requiredEnv.filter((v) => !process.env[v]);
+if (missingEnv.length > 0) {
+    console.error('Erro: Variáveis de ambiente obrigatórias não definidas:', missingEnv.join(', '));
+    process.exit(1);
+}
+// Configurações de segurança
+app.use((0, helmet_1.default)());
+// Rate limiting otimizado
+app.use(rateLimiter_1.basicRateLimit);
+app.use(rateLimiter_1.apiSlowDown);
+// CORS mais simples e robusto - permitir explicitamente o domínio principal
+const corsOptions = {
+    origin: [
+        'https://catalofacil.catalofacil.com.br',
+        'https://catalofacil.com.br',
+        'https://catalofacil-frontend.vercel.app',
+        /https:\/\/.*\.catalofacil\.com\.br$/,
+        /https:\/\/.*catalofacil-frontend.*\.vercel\.app$/,
+        /https:\/\/.*-alex-brittos-projects\.vercel\.app$/
+    ],
+    credentials: true,
+    optionsSuccessStatus: 200,
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+    methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS']
+};
+// Log de debug para CORS
+app.use((req, res, next) => {
+    const origin = req.headers.origin;
+    if (origin && req.method === 'OPTIONS') {
+        console.log('🌍 CORS Preflight:', {
+            origin,
+            method: req.headers['access-control-request-method'],
+            headers: req.headers['access-control-request-headers'],
+            path: req.path
+        });
+    }
+    next();
+});
+app.use((0, cors_1.default)(corsOptions));
+app.use(express_1.default.json({ limit: '10mb' }));
+app.use(express_1.default.urlencoded({ limit: '10mb', extended: true }));
+// Middleware de logging seguro
+app.use((req, res, next) => {
+    // Nunca logar dados sensíveis como req.body ou req.headers!
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.path} - Origin: ${req.headers.origin || 'none'}`);
+    next();
+});
+// Middleware para capturar erros não tratados
+app.use((err, req, res, next) => {
+    console.error('💥 Erro não tratado capturado:', {
+        error: err.message,
+        stack: err.stack?.substring(0, 500),
+        method: req.method,
+        path: req.path,
+        origin: req.headers.origin,
+        timestamp: new Date().toISOString()
+    });
+    // Se headers já foram enviados, delegar para o error handler padrão do Express
+    if (res.headersSent) {
+        return next(err);
+    }
+    // Responder com erro genérico
+    res.status(500).json({
+        error: 'Erro interno do servidor',
+        message: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong!',
+        timestamp: new Date().toISOString()
+    });
+});
+// Rota de teste
+app.get('/', (req, res) => {
+    res.json({
+        message: 'API rodando com sucesso!',
+        environment: process.env.NODE_ENV || 'development',
+        timestamp: new Date().toISOString()
+    });
+});
+// Rota de health check otimizada
+app.get('/health', (req, res) => {
+    res.json({
+        status: 'ok',
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime(),
+        cache: (0, cache_1.getCacheStats)()
+    });
+});
+// Endpoint para estatísticas do cache
+app.get('/cache-stats', rateLimiter_1.basicRateLimit, (req, res) => {
+    const stats = (0, cache_1.getCacheStats)();
+    res.json({
+        ...stats,
+        timestamp: new Date().toISOString()
+    });
+});
+// Middleware de tratamento de erros
+app.use((err, req, res, next) => {
+    console.error('Erro:', err);
+    if (process.env.NODE_ENV === 'production') {
+        res.status(500).json({ error: 'Erro interno do servidor' });
+    }
+    else {
+        res.status(500).json({ error: err.message, stack: err.stack });
+    }
+});
+app.use('/auth', rateLimiter_1.authRateLimit, auth_1.default);
+app.use('/products', products_1.default);
+app.use('/site', site_1.default);
+app.use('/domain', domain_1.default);
+app.use('/stores', stores_1.default);
+app.use('/ssoProviders', ssoProviders_1.default);
+app.use('/samlProviders', samlProviders_1.default);
+app.use('/ssoDomains', ssoDomains_1.default);
+app.use('/flowState', flowState_1.default);
+app.use('/users', users_1.default);
+app.use('/categories', categories_1.default);
+app.use('/categorias', categories_1.default); // Alias em português
+app.use('/instances', instances_1.default);
+app.use('/profiles', profiles_1.default);
+app.use('/mfaChallenges', mfaChallenges_1.default);
+app.use('/customers', customers_1.default);
+app.use('/samlRelayStates', samlRelayStates_1.default);
+app.use('/codeChallengeMethod', codeChallengeMethod_1.default);
+app.use('/controllerAdmins', controllerAdmins_1.default);
+app.use('/sessions', sessions_1.default);
+app.use('/storeSettings', storeSettings_1.default);
+app.use('/mfaAmrClaims', mfaAmrClaims_1.default);
+app.use('/mfaFactors', mfaFactors_1.default);
+app.use('/expenses', expenses_1.default);
+app.use('/despesas', expenses_1.default); // Alias em português
+app.use('/domainOwners', domainOwners_1.default);
+app.use('/identities', identities_1.default);
+app.use('/orders', orders_1.default);
+app.use('/pedidos', orders_1.default); // Alias em português
+app.use('/sales', sales_1.default);
+app.use('/vendas', sales_1.default); // Alias em português
+app.use('/cashFlow', cashFlow_1.default);
+app.use('/fluxo-caixa', cashFlow_1.default); // Alias em português
+app.use('/creditAccounts', creditAccounts_1.default);
+app.use('/credit-accounts', creditAccounts_1.default); // Alias com hífen
+app.use('/creditTransactions', creditTransactions_1.default);
+app.use('/credit-transactions', creditTransactions_1.default); // Alias com hífen
+app.use('/customers', customers_1.default);
+// Middleware para rotas não encontradas
+app.use('*', (req, res) => {
+    res.status(404).json({ error: 'Rota não encontrada' });
+});
+const PORT = process.env.PORT || 3000;
+// Graceful shutdown
+process.on('SIGTERM', async () => {
+    console.log('SIGTERM recebido, fechando servidor...');
+    try {
+        await prisma_1.default.$disconnect();
+        console.log('Prisma desconectado com sucesso');
+    }
+    catch (error) {
+        console.error('Erro ao desconectar Prisma:', error);
+    }
+    process.exit(0);
+});
+process.on('SIGINT', async () => {
+    console.log('SIGINT recebido, fechando servidor...');
+    try {
+        await prisma_1.default.$disconnect();
+        console.log('Prisma desconectado com sucesso');
+    }
+    catch (error) {
+        console.error('Erro ao desconectar Prisma:', error);
+    }
+    process.exit(0);
+});
+app.listen(PORT, () => {
+    console.log(`🚀 Servidor rodando na porta ${PORT}`);
+    console.log(`📊 Ambiente: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`🌐 URL: ${process.env.RAILWAY_PUBLIC_DOMAIN || 'localhost'}`);
+});

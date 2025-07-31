@@ -124,8 +124,8 @@ router.post('/', authenticateJWT, userRateLimit, async (req, res) => {
       ...parse.data,
       user_id: req.user.id,
       // Converter valores string para número se necessário
-      unit_price: String(parse.data.unit_price),
-      total_price: String(parse.data.total_price),
+      unit_price: Number(parse.data.unit_price),
+      total_price: Number(parse.data.total_price),
       // Garantir que sale_date seja uma Date
       sale_date: parse.data.sale_date instanceof Date ? parse.data.sale_date : new Date(parse.data.sale_date)
     };
@@ -269,8 +269,8 @@ router.post('/product-sale', authenticateJWT, userRateLimit, async (req, res) =>
           user_id: req.user!.id,
           product_name: produto.name,
           quantity: quantity,
-          unit_price: String(unit_price),
-          total_price: String(total_price),
+          unit_price: Number(unit_price),
+          total_price: Number(total_price),
           sale_date: data_venda,
           status: 'completed',
           store_id: produto.store_id

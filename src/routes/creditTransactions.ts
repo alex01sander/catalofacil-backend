@@ -133,7 +133,7 @@ router.get('/',
     
     try {
       // Construir filtros
-      const where: any = { user_id: req.user.id };
+      const where: any = {};
       
       // Filtro por conta de crédito
       if (req.query.credit_account_id) {
@@ -159,9 +159,6 @@ router.get('/',
                 customer_name: true,
                 customer_phone: true
               }
-            },
-            credit_installments: {
-              orderBy: { due_date: 'asc' }
             }
           },
           ...paginationQuery
@@ -196,19 +193,14 @@ router.get('/:id', authenticateJWT, async (req, res) => {
     const transacao = await prisma.credit_transactions.findFirst({
       where: { 
         id: req.params.id,
-        user_id: req.user.id
       },
       include: {
         credit_accounts: {
           select: {
             id: true,
             customer_name: true,
-            customer_phone: true,
-            customer_address: true
+            customer_phone: true
           }
-        },
-        credit_installments: {
-          orderBy: { due_date: 'asc' }
         }
       }
     });
@@ -259,10 +251,7 @@ router.post('/debit-with-installments', authenticateJWT, userRateLimit, async (r
     
     // Buscar dados do cliente existente
     const clienteExistente = await prisma.credit_accounts.findFirst({
-      where: {
-        id: credit_account_id,
-        user_id: req.user.id
-      }
+      where: { id: credit_account_id }
     });
     
     if (!clienteExistente) {
@@ -280,64 +269,26 @@ router.post('/debit-with-installments', authenticateJWT, userRateLimit, async (r
     const frequencyConvertida = frequencyMap[frequency as string] || 'mensal';
     
     // Processar débito com parcelamento
-    const resultado = await prisma.$transaction(async (tx) => {
-      // Atualizar dívida total do cliente
-      await tx.credit_accounts.update({
-        where: { id: credit_account_id },
-        data: {
-          total_debt: {
-            increment: amount
-          }
+    // (Removido o processamento de credit_installments para SQLite)
+    await prisma.credit_accounts.update({
+      where: { id: credit_account_id },
+      data: {
+        total_debt: {
+          increment: amount
         }
-      });
-      
-      // Criar transação de débito
-      const transacao = await tx.credit_transactions.create({
-        data: {
-          credit_account_id: credit_account_id,
-          user_id: req.user!.id,
-          type: 'debito',
-          amount: amount,
-          description: description,
-          date: new Date(first_payment_date)
-        }
-      });
-      
-      console.log('✅ [CreditTransactions] Transação criada:', transacao.id);
-      
-      // Calcular e criar parcelas
-      const dueDates = calculateDueDates(
-        new Date(first_payment_date),
-        installments,
-        frequencyConvertida
-      );
-      
-      const valorParcela = amount / installments;
-      
-      const parcelas = await Promise.all(
-        dueDates.map((dueDate, index) =>
-          tx.credit_installments.create({
-            data: {
-              transaction_id: transacao.id,
-              installment_number: index + 1,
-              due_date: dueDate,
-              amount: valorParcela,
-              status: 'pending'
-            }
-          })
-        )
-      );
-      
-      console.log('✅ [CreditTransactions] Parcelas criadas:', parcelas.length);
-      
-      return {
-        transacao,
-        parcelas,
-        creditAccountId: credit_account_id
-      };
+      }
     });
     
-    // Limpar cache do usuário
+    const transacao = await prisma.credit_transactions.create({
+      data: {
+        credit_account_id: credit_account_id,
+        type: 'debito',
+        amount: amount,
+        description: description || '',
+        due_date: new Date(first_payment_date)
+      }
+    });
+    
     clearUserCache(req.user.id);
     
     console.log('🎉 [CreditTransactions] Débito com parcelamento criado com sucesso!');
@@ -346,14 +297,10 @@ router.post('/debit-with-installments', authenticateJWT, userRateLimit, async (r
       success: true,
       message: 'Débito registrado com sucesso',
       transaction: {
-        ...resultado.transacao,
-        amount: parseFloat(resultado.transacao.amount.toString())
+        ...transacao,
+        amount: parseFloat(transacao.amount.toString())
       },
-      installments: resultado.parcelas.map(parcela => ({
-        ...parcela,
-        amount: parseFloat(parcela.amount.toString())
-      })),
-      credit_account_id: resultado.creditAccountId
+      credit_account_id: credit_account_id
     });
     
   } catch (error) {
@@ -375,26 +322,20 @@ async function processarDebitoComParcelamento(userId: string, data: any) {
       // Verificar se já existe cliente com este telefone
       const clienteExistente = await tx.credit_accounts.findFirst({
         where: {
-          customer_phone: data.customer_phone,
-          user_id: userId
+          customer_phone: data.customer_phone
         }
       });
-      
       if (clienteExistente) {
         throw new Error('Cliente já existe com este telefone');
       }
-      
       // Criar novo cliente
       const novaConta = await tx.credit_accounts.create({
         data: {
-          user_id: userId,
           customer_name: data.customer_name,
           customer_phone: data.customer_phone,
-          customer_address: data.customer_address,
           total_debt: data.total_amount
         }
       });
-      
       creditAccountId = novaConta.id;
       console.log('✅ [CreditTransactions] Novo cliente criado:', novaConta.id);
     } else {
@@ -402,68 +343,33 @@ async function processarDebitoComParcelamento(userId: string, data: any) {
       if (!data.existing_customer_id) {
         throw new Error('ID do cliente existente é obrigatório');
       }
-      
       const clienteExistente = await tx.credit_accounts.findFirst({
         where: {
-          id: data.existing_customer_id,
-          user_id: userId
+          id: data.existing_customer_id
         }
       });
-      
       if (!clienteExistente) {
         throw new Error('Cliente não encontrado');
       }
-      
       creditAccountId = clienteExistente.id;
-      
       // Atualizar dívida total usando a função segura
       await atualizarTotalDebt(creditAccountId, 'debito', data.total_amount, tx);
-      
       console.log('✅ [CreditTransactions] Cliente existente atualizado:', creditAccountId);
     }
-    
     // 2. Criar transação de débito
     const transacao = await tx.credit_transactions.create({
       data: {
         credit_account_id: creditAccountId,
-        user_id: userId,
         type: 'debito',
         amount: data.total_amount,
-        description: data.description,
-        date: data.first_due_date
+        description: data.description || '',
+        due_date: data.first_due_date
       }
     });
-    
     console.log('✅ [CreditTransactions] Transação criada:', transacao.id);
-    
-    // 3. Calcular e criar parcelas
-    const dueDates = calculateDueDates(
-      data.first_due_date,
-      data.installments_count,
-      data.frequency
-    );
-    
-    const valorParcela = data.total_amount / data.installments_count;
-    
-    const parcelas = await Promise.all(
-      dueDates.map((dueDate, index) =>
-        tx.credit_installments.create({
-          data: {
-            transaction_id: transacao.id,
-            installment_number: index + 1,
-            due_date: dueDate,
-            amount: valorParcela,
-            status: 'pending'
-          }
-        })
-      )
-    );
-    
-    console.log('✅ [CreditTransactions] Parcelas criadas:', parcelas.length);
-    
+    // (Removido o processamento de parcelas para SQLite)
     return {
       transacao,
-      parcelas,
       creditAccountId
     };
   });
@@ -479,7 +385,6 @@ router.post('/', authenticateJWT, userRateLimit, async (req, res) => {
     // Converter tipo do frontend para formato da API
     const payloadConvertido = {
       ...req.body,
-      user_id: req.user.id,
       type: req.body.type === 'payment' ? 'pagamento' : req.body.type
     };
     
@@ -498,7 +403,14 @@ router.post('/', authenticateJWT, userRateLimit, async (req, res) => {
     // Usar transação para criar transação e atualizar dívida total
     const resultado = await prisma.$transaction(async (tx) => {
       // Criar transação
-      const transacao = await tx.credit_transactions.create({ data: parse.data });
+      const { user_id, date, description, ...rest } = parse.data;
+      const transacao = await tx.credit_transactions.create({
+        data: {
+          ...rest,
+          description: description || '',
+          due_date: (date as Date) || new Date()
+        }
+      });
       
       // Atualizar dívida total da conta usando a função segura
       await atualizarTotalDebt(parse.data.credit_account_id, parse.data.type, parse.data.amount, tx);
@@ -539,12 +451,9 @@ router.put('/:id', authenticateJWT, userRateLimit, async (req, res) => {
   }
   
   try {
-    // Verificar se a transação pertence ao usuário
+    // Verificar se a transação existe
     const transacaoExistente = await prisma.credit_transactions.findFirst({
-      where: { 
-        id: req.params.id,
-        user_id: req.user.id
-      }
+      where: { id: req.params.id }
     });
     
     if (!transacaoExistente) {
@@ -588,12 +497,9 @@ router.post('/recalculate-debt/:creditAccountId', authenticateJWT, userRateLimit
   }
   
   try {
-    // Verificar se a conta pertence ao usuário
+    // Verificar se a conta existe
     const conta = await prisma.credit_accounts.findFirst({
-      where: { 
-        id: parse.data.creditAccountId,
-        user_id: req.user.id
-      }
+      where: { id: parse.data.creditAccountId }
     });
     
     if (!conta) {
@@ -631,12 +537,9 @@ router.delete('/:id', authenticateJWT, userRateLimit, async (req, res) => {
   }
   
   try {
-    // Verificar se a transação pertence ao usuário
+    // Verificar se a transação existe
     const transacaoExistente = await prisma.credit_transactions.findFirst({
-      where: { 
-        id: req.params.id,
-        user_id: req.user.id
-      }
+      where: { id: req.params.id }
     });
     
     if (!transacaoExistente) {

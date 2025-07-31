@@ -131,7 +131,7 @@ router.get('/public/:slug/products', async (req, res) => {
       stock: true,
       is_active: true,
       image: true,
-      images: true,
+      store_id: true,
       categories: {
         select: {
           id: true,
@@ -143,7 +143,7 @@ router.get('/public/:slug/products', async (req, res) => {
   });
   
   console.log('Produtos ativos encontrados para vitrine:', produtos.length);
-  console.log('Lista de produtos:', produtos.map(p => ({ id: p.id, name: p.name, store_id: p.categories })));
+  console.log('Lista de produtos:', produtos.map(p => ({ id: p.id, name: p.name, store_id: p.store_id })));
   
   res.json(produtos);
 });
@@ -205,7 +205,6 @@ router.get('/public/:slug/products/:id', async (req, res) => {
       stock: true,
       is_active: true,
       image: true,
-      images: true,
       categories: {
         select: {
           id: true,

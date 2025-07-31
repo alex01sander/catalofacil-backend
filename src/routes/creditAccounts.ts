@@ -27,7 +27,7 @@ router.get('/',
     
     try {
       // Construir filtros
-      const where: any = { user_id: req.user.id };
+      const where: any = { };
       
       // Filtro por busca
       if (req.query.search) {
@@ -86,16 +86,10 @@ router.get('/:id', authenticateJWT, async (req, res) => {
   try {
     const conta = await prisma.credit_accounts.findFirst({
       where: { 
-        id: req.params.id,
-        user_id: req.user.id
+        id: req.params.id
       },
       include: {
         credit_transactions: {
-          include: {
-            credit_installments: {
-              orderBy: { due_date: 'asc' }
-            }
-          },
           orderBy: { created_at: 'desc' }
         }
       }
@@ -158,8 +152,7 @@ router.post('/', authenticateJWT, userRateLimit, async (req, res) => {
     // Verificar se já existe cliente com este telefone
     const clienteExistente = await prisma.credit_accounts.findFirst({
       where: {
-        customer_phone: parse.data.customer_phone,
-        user_id: req.user.id
+        customer_phone: parse.data.customer_phone
       }
     });
     
@@ -189,7 +182,7 @@ router.post('/', authenticateJWT, userRateLimit, async (req, res) => {
     // Garantir que user_id seja definido
     const dadosParaCriar = {
       ...parse.data,
-      user_id: req.user.id // Sempre usar o ID do usuário autenticado
+
     };
     
     const novaConta = await prisma.credit_accounts.create({ data: dadosParaCriar });
@@ -232,11 +225,10 @@ router.put('/:id', authenticateJWT, userRateLimit, async (req, res) => {
   }
   
   try {
-    // Verificar se a conta pertence ao usuário
+    // Verificar se a conta existe
     const contaExistente = await prisma.credit_accounts.findFirst({
       where: { 
-        id: req.params.id,
-        user_id: req.user.id
+        id: req.params.id
       }
     });
     
@@ -275,8 +267,7 @@ router.delete('/:id', authenticateJWT, userRateLimit, async (req, res) => {
     // Verificar se a conta pertence ao usuário
     const contaExistente = await prisma.credit_accounts.findFirst({
       where: { 
-        id: req.params.id,
-        user_id: req.user.id
+        id: req.params.id
       }
     });
     
@@ -317,8 +308,7 @@ router.get('/:id/transactions', authenticateJWT, userRateLimit, async (req, res)
     // Verificar se a conta pertence ao usuário
     const conta = await prisma.credit_accounts.findFirst({
       where: { 
-        id: req.params.id,
-        user_id: req.user.id
+        id: req.params.id
       }
     });
     
@@ -329,13 +319,7 @@ router.get('/:id/transactions', authenticateJWT, userRateLimit, async (req, res)
     // Buscar transações da conta
     const transacoes = await prisma.credit_transactions.findMany({
       where: { 
-        credit_account_id: req.params.id,
-        user_id: req.user.id
-      },
-      include: {
-        credit_installments: {
-          orderBy: { due_date: 'asc' }
-        }
+        credit_account_id: req.params.id
       },
       orderBy: { created_at: 'desc' }
     });

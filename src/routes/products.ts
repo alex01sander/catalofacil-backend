@@ -173,7 +173,7 @@ router.post('/', authenticateJWT, uploadRateLimit, upload.single('image'), async
         category_id: categoryId,
         description: req.body.description || null,
         image: imageUrl,
-        images: imageUrl ? [imageUrl] : [],
+        // images: imageUrl ? JSON.stringify([imageUrl]) : "[]", // Temporariamente removido para testes
         store_id: storeId,
         created_at: new Date(),
         updated_at: new Date()

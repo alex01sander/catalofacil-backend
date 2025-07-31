@@ -9,7 +9,7 @@ const router = Router();
 router.post('/register', async (req, res) => {
   const { email, password } = req.body;
   const hash = await bcrypt.hash(password, 10);
-  const user = await prisma.user.create({ data: { email, password: hash } });
+  const user = await prisma.users.create({ data: { email, encrypted_password: hash } });
   res.json(user);
 });
 
@@ -21,13 +21,13 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ error: 'Email e senha são obrigatórios' });
     }
     
-    const user = await prisma.user.findUnique({ where: { email } });
+    const user = await prisma.users.findUnique({ where: { email } });
     
     if (!user) {
       return res.status(401).json({ error: 'Credenciais inválidas' });
     }
     
-    const isValidPassword = await bcrypt.compare(password, user.password);
+    const isValidPassword = await bcrypt.compare(password, user.encrypted_password || '');
     if (!isValidPassword) {
       return res.status(401).json({ error: 'Credenciais inválidas' });
     }
@@ -45,7 +45,7 @@ router.post('/login', async (req, res) => {
       user: {
         id: user.id,
         email: user.email,
-        createdAt: user.createdAt
+        createdAt: user.created_at
       }
     });
   } catch (error: any) {
