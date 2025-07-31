@@ -8,6 +8,7 @@ exports.app = void 0;
 const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
 const helmet_1 = __importDefault(require("helmet"));
+const path_1 = __importDefault(require("path"));
 const prisma_1 = __importDefault(require("./lib/prisma"));
 const products_1 = __importDefault(require("./routes/products"));
 const auth_1 = __importDefault(require("./routes/auth"));
@@ -89,6 +90,11 @@ app.use((req, res, next) => {
 app.use((0, cors_1.default)(corsOptions));
 app.use(express_1.default.json({ limit: '10mb' }));
 app.use(express_1.default.urlencoded({ limit: '10mb', extended: true }));
+// Servir arquivos estáticos
+app.use('/assets', express_1.default.static(path_1.default.join(__dirname, '../dist/assets')));
+app.use('/assets', express_1.default.static(path_1.default.join(__dirname, '../public/assets')));
+app.use(express_1.default.static(path_1.default.join(__dirname, '../dist')));
+app.use(express_1.default.static(path_1.default.join(__dirname, '../public')));
 // Middleware de logging seguro
 app.use((req, res, next) => {
     // Nunca logar dados sensíveis como req.body ou req.headers!
@@ -191,6 +197,39 @@ app.use('/credit-transactions', creditTransactions_1.default); // Alias com híf
 app.use('/customers', customers_1.default);
 // Middleware para rotas não encontradas
 app.use('*', (req, res) => {
+    // Não capturar requisições de arquivos estáticos
+    if (req.path.startsWith('/assets/') ||
+        req.path.includes('.js') ||
+        req.path.includes('.css') ||
+        req.path.includes('.png') ||
+        req.path.includes('.jpg') ||
+        req.path.includes('.ico') ||
+        req.path.includes('.svg')) {
+        return res.status(404).send('File not found');
+    }
+    // Se não for uma rota da API, tentar servir o frontend
+    if (!req.path.startsWith('/api/') &&
+        !req.path.startsWith('/auth/') &&
+        !req.path.startsWith('/products/') &&
+        !req.path.startsWith('/customers/') &&
+        !req.path.startsWith('/orders/') &&
+        !req.path.startsWith('/sales/') &&
+        !req.path.startsWith('/categories/') &&
+        !req.path.startsWith('/stores/') &&
+        !req.path.startsWith('/health') &&
+        !req.path.startsWith('/cache-stats') &&
+        req.path !== '/' &&
+        req.path !== '/health') {
+        // Tentar servir o index.html do frontend
+        const indexPath = path_1.default.join(__dirname, '../dist/index.html');
+        const publicIndexPath = path_1.default.join(__dirname, '../public/index.html');
+        if (require('fs').existsSync(indexPath)) {
+            return res.sendFile(indexPath);
+        }
+        else if (require('fs').existsSync(publicIndexPath)) {
+            return res.sendFile(publicIndexPath);
+        }
+    }
     res.status(404).json({ error: 'Rota não encontrada' });
 });
 const PORT = process.env.PORT || 3000;
