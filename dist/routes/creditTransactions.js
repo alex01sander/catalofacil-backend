@@ -39,6 +39,71 @@ function calculateDueDates(firstDueDate, installmentsCount, frequency) {
     }
     return dueDates;
 }
+// Função para recalcular total_debt baseado nas transações
+async function recalcularTotalDebt(creditAccountId, tx) {
+    const prismaClient = tx || prisma_1.default;
+    try {
+        // Buscar todas as transações da conta
+        const transacoes = await prismaClient.credit_transactions.findMany({
+            where: { credit_account_id: creditAccountId },
+            select: { type: true, amount: true }
+        });
+        // Calcular total
+        let totalDebt = 0;
+        for (const transacao of transacoes) {
+            if (transacao.type === 'debito') {
+                totalDebt += parseFloat(transacao.amount.toString());
+            }
+            else if (transacao.type === 'pagamento') {
+                totalDebt -= parseFloat(transacao.amount.toString());
+            }
+        }
+        // Garantir que não seja negativo
+        totalDebt = Math.max(0, totalDebt);
+        // Atualizar total_debt
+        await prismaClient.credit_accounts.update({
+            where: { id: creditAccountId },
+            data: { total_debt: totalDebt }
+        });
+        console.log(`✅ [CreditTransactions] Total de dívida recalculado para conta ${creditAccountId}: R$ ${totalDebt.toFixed(2)}`);
+        return totalDebt;
+    }
+    catch (error) {
+        console.error('❌ [CreditTransactions] Erro ao recalcular total_debt:', error);
+        throw error;
+    }
+}
+// Função para atualizar total_debt de forma segura
+async function atualizarTotalDebt(creditAccountId, tipo, valor, tx) {
+    const prismaClient = tx || prisma_1.default;
+    try {
+        if (tipo === 'debito') {
+            await prismaClient.credit_accounts.update({
+                where: { id: creditAccountId },
+                data: {
+                    total_debt: {
+                        increment: valor
+                    }
+                }
+            });
+        }
+        else if (tipo === 'pagamento') {
+            await prismaClient.credit_accounts.update({
+                where: { id: creditAccountId },
+                data: {
+                    total_debt: {
+                        decrement: valor
+                    }
+                }
+            });
+        }
+        console.log(`✅ [CreditTransactions] Total de dívida atualizado: ${tipo} R$ ${valor.toFixed(2)}`);
+    }
+    catch (error) {
+        console.error('❌ [CreditTransactions] Erro ao atualizar total_debt:', error);
+        throw error;
+    }
+}
 // Listar transações de crédito do usuário
 router.get('/', auth_1.default, rateLimiter_1.userRateLimit, pagination_1.paginationMiddleware, pagination_1.paginationHeaders, (0, cache_1.cacheMiddleware)(300, (req) => (0, cache_1.generateCacheKey)('credit-transactions', req.user.id, {
     page: req.pagination?.page,
@@ -281,15 +346,8 @@ async function processarDebitoComParcelamento(userId, data) {
                 throw new Error('Cliente não encontrado');
             }
             creditAccountId = clienteExistente.id;
-            // Atualizar dívida total
-            await tx.credit_accounts.update({
-                where: { id: creditAccountId },
-                data: {
-                    total_debt: {
-                        increment: data.total_amount
-                    }
-                }
-            });
+            // Atualizar dívida total usando a função segura
+            await atualizarTotalDebt(creditAccountId, 'debito', data.total_amount, tx);
             console.log('✅ [CreditTransactions] Cliente existente atualizado:', creditAccountId);
         }
         // 2. Criar transação de débito
@@ -344,31 +402,12 @@ router.post('/', auth_1.default, rateLimiter_1.userRateLimit, async (req, res) =
             return res.status(400).json({ error: 'Dados inválidos', details: parse.error.issues });
         }
         console.log('✅ [CreditTransactions] Dados validados:', parse.data);
-        // Usar transação para atualizar dívida total
+        // Usar transação para criar transação e atualizar dívida total
         const resultado = await prisma_1.default.$transaction(async (tx) => {
             // Criar transação
             const transacao = await tx.credit_transactions.create({ data: parse.data });
-            // Atualizar dívida total da conta
-            if (parse.data.type === 'debito') {
-                await tx.credit_accounts.update({
-                    where: { id: parse.data.credit_account_id },
-                    data: {
-                        total_debt: {
-                            increment: parse.data.amount
-                        }
-                    }
-                });
-            }
-            else if (parse.data.type === 'pagamento') {
-                await tx.credit_accounts.update({
-                    where: { id: parse.data.credit_account_id },
-                    data: {
-                        total_debt: {
-                            decrement: parse.data.amount
-                        }
-                    }
-                });
-            }
+            // Atualizar dívida total da conta usando a função segura
+            await atualizarTotalDebt(parse.data.credit_account_id, parse.data.type, parse.data.amount, tx);
             return transacao;
         });
         // Limpar cache do usuário
@@ -410,20 +449,65 @@ router.put('/:id', auth_1.default, rateLimiter_1.userRateLimit, async (req, res)
         if (!transacaoExistente) {
             return res.status(404).json({ error: 'Transação de crédito não encontrada' });
         }
-        const transacaoAtualizada = await prisma_1.default.credit_transactions.update({
-            where: { id: req.params.id },
-            data: parseBody.data
+        // Usar transação para atualizar e recalcular dívida
+        const resultado = await prisma_1.default.$transaction(async (tx) => {
+            // Atualizar transação
+            const transacaoAtualizada = await tx.credit_transactions.update({
+                where: { id: req.params.id },
+                data: parseBody.data
+            });
+            // Recalcular total_debt da conta
+            await recalcularTotalDebt(transacaoAtualizada.credit_account_id, tx);
+            return transacaoAtualizada;
         });
         // Limpar cache do usuário
         (0, cache_1.clearUserCache)(req.user.id);
         res.json({
-            ...transacaoAtualizada,
-            amount: parseFloat(transacaoAtualizada.amount.toString())
+            ...resultado,
+            amount: parseFloat(resultado.amount.toString())
         });
     }
     catch (error) {
         console.error('Erro ao atualizar transação de crédito:', error);
         res.status(500).json({ error: 'Erro interno do servidor' });
+    }
+});
+// Rota para recalcular total_debt de uma conta
+router.post('/recalculate-debt/:creditAccountId', auth_1.default, rateLimiter_1.userRateLimit, async (req, res) => {
+    if (!req.user)
+        return res.status(401).json({ error: 'Usuário não autenticado' });
+    const parse = zod_2.z.object({ creditAccountId: zod_2.z.string().min(1, 'ID da conta obrigatório') }).safeParse(req.params);
+    if (!parse.success) {
+        return res.status(400).json({ error: 'Parâmetro inválido', details: parse.error.issues });
+    }
+    try {
+        // Verificar se a conta pertence ao usuário
+        const conta = await prisma_1.default.credit_accounts.findFirst({
+            where: {
+                id: parse.data.creditAccountId,
+                user_id: req.user.id
+            }
+        });
+        if (!conta) {
+            return res.status(404).json({ error: 'Conta de crédito não encontrada' });
+        }
+        // Recalcular total_debt
+        const novoTotal = await recalcularTotalDebt(parse.data.creditAccountId);
+        // Limpar cache do usuário
+        (0, cache_1.clearUserCache)(req.user.id);
+        res.json({
+            success: true,
+            credit_account_id: parse.data.creditAccountId,
+            total_debt: novoTotal,
+            message: 'Total de dívida recalculado com sucesso'
+        });
+    }
+    catch (error) {
+        console.error('❌ [CreditTransactions] Erro ao recalcular total_debt:', error);
+        res.status(500).json({
+            error: 'Erro interno do servidor',
+            details: error instanceof Error ? error.message : 'Erro desconhecido'
+        });
     }
 });
 // Deletar transação de crédito
