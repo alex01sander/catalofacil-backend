@@ -110,18 +110,18 @@ export const categoriesUpdateInputSchema = z.object({
 // Customers
 export const customersCreateInputSchema = z.object({
   store_owner_id: z.string(),
-  name: z.string(),
-  email: z.string().optional(),
-  phone: z.string().optional(),
+  name: z.string().min(1, 'Nome é obrigatório'),
+  email: z.string().email('Formato de email inválido').optional(),
+  phone: z.string().min(1, 'Telefone é obrigatório'),
   address: z.string().optional(),
   store_id: z.string().optional(),
 });
 
 export const customersUpdateInputSchema = z.object({
   store_owner_id: z.string().optional(),
-  name: z.string().optional(),
-  email: z.string().optional(),
-  phone: z.string().optional(),
+  name: z.string().min(1, 'Nome é obrigatório').optional(),
+  email: z.string().email('Formato de email inválido').optional(),
+  phone: z.string().min(1, 'Telefone é obrigatório').optional(),
   address: z.string().optional(),
   store_id: z.string().optional(),
 });

@@ -19,25 +19,40 @@ router.get('/:id', authenticateJWT, async (req, res) => {
   if (!parse.success) {
     return res.status(400).json({ error: 'Parâmetro inválido', details: parse.error.issues });
   }
+  
   const cliente = await prisma.customers.findUnique({
     where: { id: req.params.id },
     include: { stores: true, orders: true }
   });
+  
   if (!cliente) return res.status(404).json({ error: 'Cliente não encontrado' });
   res.json(cliente);
 });
 
 // Criar cliente
-router.post('/', async (req, res) => {
+router.post('/', authenticateJWT, async (req, res) => {
   const parse = customersCreateInputSchema.safeParse(req.body);
   if (!parse.success) {
     return res.status(400).json({ error: 'Dados inválidos', details: parse.error.issues });
   }
+  
   try {
+    // Verificar se já existe cliente com o mesmo email
+    if (parse.data.email) {
+      const clienteExistente = await prisma.customers.findFirst({
+        where: { email: parse.data.email }
+      });
+      
+      if (clienteExistente) {
+        return res.status(400).json({ error: 'Email já está em uso' });
+      }
+    }
+    
     const novo = await prisma.customers.create({ data: parse.data });
     res.status(201).json(novo);
   } catch (e) {
-    res.status(400).json({ error: 'Erro ao criar cliente', details: e });
+    console.error('Erro ao criar cliente:', e);
+    res.status(400).json({ error: 'Erro ao criar cliente' });
   }
 });
 
@@ -47,18 +62,30 @@ router.put('/:id', authenticateJWT, async (req, res) => {
   if (!parseParams.success) {
     return res.status(400).json({ error: 'Parâmetro inválido', details: parseParams.error.issues });
   }
+  
   const parseBody = customersUpdateInputSchema.safeParse(req.body);
   if (!parseBody.success) {
     return res.status(400).json({ error: 'Dados inválidos', details: parseBody.error.issues });
   }
+  
   try {
+    // Verificar se o cliente existe
+    const clienteExistente = await prisma.customers.findUnique({
+      where: { id: req.params.id }
+    });
+    
+    if (!clienteExistente) {
+      return res.status(404).json({ error: 'Cliente não encontrado' });
+    }
+    
     const atualizado = await prisma.customers.update({
       where: { id: req.params.id },
       data: parseBody.data,
     });
     res.json(atualizado);
   } catch (e) {
-    res.status(400).json({ error: 'Erro ao atualizar cliente', details: e });
+    console.error('Erro ao atualizar cliente:', e);
+    res.status(400).json({ error: 'Erro ao atualizar cliente' });
   }
 });
 
@@ -68,11 +95,22 @@ router.delete('/:id', authenticateJWT, async (req, res) => {
   if (!parse.success) {
     return res.status(400).json({ error: 'Parâmetro inválido', details: parse.error.issues });
   }
+  
   try {
+    // Verificar se o cliente existe
+    const clienteExistente = await prisma.customers.findUnique({
+      where: { id: req.params.id }
+    });
+    
+    if (!clienteExistente) {
+      return res.status(404).json({ error: 'Cliente não encontrado' });
+    }
+    
     await prisma.customers.delete({ where: { id: req.params.id } });
     res.status(204).send();
   } catch (e) {
-    res.status(400).json({ error: 'Erro ao deletar cliente', details: e });
+    console.error('Erro ao deletar cliente:', e);
+    res.status(400).json({ error: 'Erro ao deletar cliente' });
   }
 });
 
