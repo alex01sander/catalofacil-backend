@@ -237,10 +237,10 @@ router.post('/debit-with-installments', auth_1.default, rateLimiter_1.userRateLi
         const transacao = await prisma_1.default.credit_transactions.create({
             data: {
                 credit_account_id: credit_account_id,
+                user_id: req.user.id,
                 type: 'debito',
                 amount: amount,
-                description: description || '',
-                due_date: new Date(first_payment_date)
+                description: description || ''
             }
         });
         (0, cache_1.clearUserCache)(req.user.id);
@@ -281,6 +281,7 @@ async function processarDebitoComParcelamento(userId, data) {
             // Criar novo cliente
             const novaConta = await tx.credit_accounts.create({
                 data: {
+                    user_id: userId,
                     customer_name: data.customer_name,
                     customer_phone: data.customer_phone,
                     total_debt: data.total_amount
@@ -311,10 +312,10 @@ async function processarDebitoComParcelamento(userId, data) {
         const transacao = await tx.credit_transactions.create({
             data: {
                 credit_account_id: creditAccountId,
+                user_id: userId,
                 type: 'debito',
                 amount: data.total_amount,
-                description: data.description || '',
-                due_date: data.first_due_date
+                description: data.description || ''
             }
         });
         console.log('✅ [CreditTransactions] Transação criada:', transacao.id);
@@ -351,8 +352,8 @@ router.post('/', auth_1.default, rateLimiter_1.userRateLimit, async (req, res) =
             const transacao = await tx.credit_transactions.create({
                 data: {
                     ...rest,
-                    description: description || '',
-                    due_date: date || new Date()
+                    user_id: req.user.id,
+                    description: description || ''
                 }
             });
             // Atualizar dívida total da conta usando a função segura

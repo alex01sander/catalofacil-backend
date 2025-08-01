@@ -101,6 +101,7 @@ async function processOrderAcceptance(orderId, userId) {
                 if (!contaCredito) {
                     contaCredito = await tx.credit_accounts.create({
                         data: {
+                            user_id: userId,
                             customer_name: pedido.customer_name,
                             customer_phone: pedido.customer_phone,
                             total_debt: 0,
@@ -113,10 +114,10 @@ async function processOrderAcceptance(orderId, userId) {
                 await tx.credit_transactions.create({
                     data: {
                         credit_account_id: contaCredito.id,
+                        user_id: userId,
                         type: 'payment',
                         amount: pedido.total_amount,
-                        description: `Pagamento - Pedido #${pedido.id.substring(0, 8)}`,
-                        due_date: new Date()
+                        description: `Pagamento - Pedido #${pedido.id.substring(0, 8)}`
                     }
                 });
                 console.log(`📋 [Orders] Transação de crédito registrada para ${pedido.customer_name}`);
@@ -192,6 +193,11 @@ router.get('/:id', auth_1.default, async (req, res) => {
     if (!parse.success) {
         return res.status(400).json({ error: 'Parâmetro inválido', details: parse.error.issues });
     }
+    // Validar formato UUID
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(req.params.id)) {
+        return res.status(404).json({ error: 'Pedido não encontrado' });
+    }
     try {
         const pedido = await prisma_1.default.orders.findUnique({
             where: { id: req.params.id },
@@ -216,7 +222,17 @@ router.get('/:id', auth_1.default, async (req, res) => {
         });
         if (!pedido)
             return res.status(404).json({ error: 'Pedido não encontrado' });
-        res.json(pedido);
+        // Converter valores decimais para números
+        const pedidoComValoresNumericos = {
+            ...pedido,
+            total_amount: Number(pedido.total_amount),
+            order_items: pedido.order_items.map(item => ({
+                ...item,
+                unit_price: Number(item.unit_price),
+                total_price: Number(item.total_price)
+            }))
+        };
+        res.json(pedidoComValoresNumericos);
     }
     catch (error) {
         console.error('❌ Erro ao buscar pedido:', error);
@@ -296,7 +312,6 @@ router.get('/:id/processing-status', auth_1.default, async (req, res) => {
                 id: true,
                 type: true,
                 amount: true,
-                due_date: true,
                 description: true
             }
         });
@@ -326,23 +341,47 @@ router.get('/:id/processing-status', auth_1.default, async (req, res) => {
     }
 });
 // Criar pedido + itens
-router.post('/', async (req, res) => {
-    const { order_items, ...pedidoData } = req.body;
+router.post('/', auth_1.default, async (req, res) => {
+    if (!req.user)
+        return res.status(401).json({ error: 'Usuário não autenticado' });
+    const { order_items, items, ...pedidoData } = req.body;
+    // Aceitar tanto 'order_items' quanto 'items'
+    const itemsToCreate = order_items || items;
     // Validação: pedido deve conter pelo menos um item
-    if (!order_items || !Array.isArray(order_items) || order_items.length === 0) {
-        return res.status(400).json({ error: 'Pedido deve conter pelo menos um item.' });
+    if (!itemsToCreate || !Array.isArray(itemsToCreate) || itemsToCreate.length === 0) {
+        return res.status(400).json({ error: 'Dados inválidos' });
     }
+    // Preparar dados do pedido com campos obrigatórios
+    const pedidoDataCompleto = {
+        ...pedidoData,
+        store_owner_id: req.user?.id, // Adicionar automaticamente se não fornecido
+        total_amount: itemsToCreate.reduce((sum, item) => sum + (item.total_price || 0), 0) // Calcular automaticamente
+    };
     // Validação dos dados do pedido (exceto itens)
-    const parse = zod_1.ordersCreateInputSchema.safeParse(pedidoData);
+    const parse = zod_1.ordersCreateInputSchema.safeParse(pedidoDataCompleto);
     if (!parse.success) {
         return res.status(400).json({ error: 'Dados inválidos', details: parse.error.issues });
     }
+    // Verificar se todos os produtos existem
+    for (const item of itemsToCreate) {
+        if (item.product_id) {
+            const produto = await prisma_1.default.products.findUnique({
+                where: { id: item.product_id },
+                select: { id: true }
+            });
+            if (!produto) {
+                return res.status(404).json({ error: 'Produto não encontrado' });
+            }
+        }
+    }
     try {
+        console.log('📝 [Orders] Dados para criar pedido:', JSON.stringify(parse.data, null, 2));
+        console.log('📦 [Orders] Itens para criar:', JSON.stringify(itemsToCreate, null, 2));
         const novo = await prisma_1.default.orders.create({
             data: {
                 ...parse.data,
                 order_items: {
-                    create: order_items
+                    create: itemsToCreate
                 }
             },
             include: {
@@ -352,6 +391,7 @@ router.post('/', async (req, res) => {
         res.status(201).json(novo);
     }
     catch (e) {
+        console.error('❌ [Orders] Erro ao criar pedido:', e);
         res.status(400).json({ error: 'Erro ao criar pedido', details: e instanceof Error ? e.message : e });
     }
 });
@@ -364,6 +404,11 @@ router.put('/:id', auth_1.default, async (req, res) => {
     const parseBody = zod_1.ordersUpdateInputSchema.safeParse(req.body);
     if (!parseBody.success) {
         return res.status(400).json({ error: 'Dados inválidos', details: parseBody.error.issues });
+    }
+    // Validar formato UUID
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(req.params.id)) {
+        return res.status(404).json({ error: 'Pedido não encontrado' });
     }
     if (!req.user) {
         return res.status(401).json({ error: 'Usuário não autenticado' });
@@ -482,15 +527,179 @@ router.post('/:id/reprocess', auth_1.default, async (req, res) => {
         });
     }
 });
+// Adicionar item ao pedido
+router.post('/:id/items', auth_1.default, async (req, res) => {
+    const parse = idParamSchema.safeParse(req.params);
+    if (!parse.success) {
+        return res.status(400).json({ error: 'Parâmetro inválido', details: parse.error.issues });
+    }
+    if (!req.user) {
+        return res.status(401).json({ error: 'Usuário não autenticado' });
+    }
+    // Validar formato UUID
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(req.params.id)) {
+        return res.status(404).json({ error: 'Pedido não encontrado' });
+    }
+    try {
+        // Verificar se o pedido existe e pertence ao usuário
+        const pedido = await prisma_1.default.orders.findUnique({
+            where: { id: req.params.id },
+            select: { id: true, store_owner_id: true }
+        });
+        if (!pedido) {
+            return res.status(404).json({ error: 'Pedido não encontrado' });
+        }
+        if (pedido.store_owner_id !== req.user.id) {
+            return res.status(403).json({ error: 'Não autorizado a adicionar itens a este pedido' });
+        }
+        // Verificar se o produto existe
+        const produto = await prisma_1.default.products.findUnique({
+            where: { id: req.body.product_id },
+            select: { id: true, name: true }
+        });
+        if (!produto) {
+            return res.status(404).json({ error: 'Produto não encontrado' });
+        }
+        // Criar item do pedido
+        const item = await prisma_1.default.order_items.create({
+            data: {
+                order_id: req.params.id,
+                product_id: req.body.product_id,
+                quantity: req.body.quantity,
+                unit_price: req.body.unit_price,
+                total_price: req.body.total_price
+            }
+        });
+        // Converter valores decimais para números
+        const itemComValoresNumericos = {
+            ...item,
+            unit_price: Number(item.unit_price),
+            total_price: Number(item.total_price)
+        };
+        res.status(201).json(itemComValoresNumericos);
+    }
+    catch (error) {
+        console.error('❌ [Orders] Erro ao adicionar item:', error);
+        res.status(500).json({
+            error: 'Erro ao adicionar item ao pedido',
+            details: error instanceof Error ? error.message : 'Erro desconhecido'
+        });
+    }
+});
+// Atualizar item do pedido
+router.put('/:id/items/:itemId', auth_1.default, async (req, res) => {
+    const parse = idParamSchema.safeParse(req.params);
+    if (!parse.success) {
+        return res.status(400).json({ error: 'Parâmetro inválido', details: parse.error.issues });
+    }
+    if (!req.user) {
+        return res.status(401).json({ error: 'Usuário não autenticado' });
+    }
+    // Validar formato UUID
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(req.params.id) || !uuidRegex.test(req.params.itemId)) {
+        return res.status(404).json({ error: 'Item não encontrado' });
+    }
+    try {
+        // Verificar se o item existe e pertence a um pedido do usuário
+        const item = await prisma_1.default.order_items.findUnique({
+            where: { id: req.params.itemId },
+            include: {
+                orders: {
+                    select: { store_owner_id: true }
+                }
+            }
+        });
+        if (!item) {
+            return res.status(404).json({ error: 'Item não encontrado' });
+        }
+        if (item.orders.store_owner_id !== req.user.id) {
+            return res.status(403).json({ error: 'Não autorizado a atualizar este item' });
+        }
+        // Atualizar item
+        const itemAtualizado = await prisma_1.default.order_items.update({
+            where: { id: req.params.itemId },
+            data: {
+                quantity: req.body.quantity,
+                unit_price: req.body.unit_price,
+                total_price: req.body.total_price
+            }
+        });
+        // Converter valores decimais para números
+        const itemAtualizadoComValoresNumericos = {
+            ...itemAtualizado,
+            unit_price: Number(itemAtualizado.unit_price),
+            total_price: Number(itemAtualizado.total_price)
+        };
+        res.json(itemAtualizadoComValoresNumericos);
+    }
+    catch (error) {
+        console.error('❌ [Orders] Erro ao atualizar item:', error);
+        res.status(500).json({
+            error: 'Erro ao atualizar item do pedido',
+            details: error instanceof Error ? error.message : 'Erro desconhecido'
+        });
+    }
+});
+// Deletar item do pedido
+router.delete('/:id/items/:itemId', auth_1.default, async (req, res) => {
+    const parse = idParamSchema.safeParse(req.params);
+    if (!parse.success) {
+        return res.status(400).json({ error: 'Parâmetro inválido', details: parse.error.issues });
+    }
+    if (!req.user) {
+        return res.status(401).json({ error: 'Usuário não autenticado' });
+    }
+    // Validar formato UUID
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(req.params.id) || !uuidRegex.test(req.params.itemId)) {
+        return res.status(404).json({ error: 'Item não encontrado' });
+    }
+    try {
+        // Verificar se o item existe e pertence a um pedido do usuário
+        const item = await prisma_1.default.order_items.findUnique({
+            where: { id: req.params.itemId },
+            include: {
+                orders: {
+                    select: { store_owner_id: true }
+                }
+            }
+        });
+        if (!item) {
+            return res.status(404).json({ error: 'Item não encontrado' });
+        }
+        if (item.orders.store_owner_id !== req.user.id) {
+            return res.status(403).json({ error: 'Não autorizado a deletar este item' });
+        }
+        // Deletar item
+        await prisma_1.default.order_items.delete({
+            where: { id: req.params.itemId }
+        });
+        res.json({ message: 'Item deletado com sucesso' });
+    }
+    catch (error) {
+        console.error('❌ [Orders] Erro ao deletar item:', error);
+        res.status(500).json({
+            error: 'Erro ao deletar item do pedido',
+            details: error instanceof Error ? error.message : 'Erro desconhecido'
+        });
+    }
+});
 // Deletar pedido
 router.delete('/:id', auth_1.default, async (req, res) => {
     const parse = idParamSchema.safeParse(req.params);
     if (!parse.success) {
         return res.status(400).json({ error: 'Parâmetro inválido', details: parse.error.issues });
     }
+    // Validar formato UUID
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(req.params.id)) {
+        return res.status(404).json({ error: 'Pedido não encontrado' });
+    }
     try {
         await prisma_1.default.orders.delete({ where: { id: req.params.id } });
-        res.status(204).send();
+        res.status(200).json({ message: 'Pedido deletado com sucesso' });
     }
     catch (e) {
         res.status(400).json({ error: 'Erro ao deletar pedido', details: e });

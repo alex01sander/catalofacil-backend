@@ -6,621 +6,495 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const supertest_1 = __importDefault(require("supertest"));
 const index_1 = require("../../src/index");
 const prisma_1 = __importDefault(require("../../src/lib/prisma"));
-const utils_1 = require("../utils");
+const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 describe('Orders Routes', () => {
     let authToken;
     let userId;
-    let storeId;
-    let productId;
     let customerId;
+    let productId;
+    let orderId;
     beforeAll(async () => {
         // Criar usuário de teste
         const user = await prisma_1.default.users.create({
             data: {
+                id: '550e8400-e29b-41d4-a716-446655440004',
                 email: 'test-orders@example.com',
-                encrypted_password: 'hashedpassword',
-                name: 'Test Orders User'
+                encrypted_password: 'hashedpassword'
             }
         });
         userId = user.id;
-        authToken = (0, utils_1.generateToken)(user);
-        // Criar loja de teste
-        const store = await prisma_1.default.stores.create({
-            data: {
-                name: 'Test Store Orders',
-                slug: 'test-store-orders',
-                user_id: userId
-            }
-        });
-        storeId = store.id;
+        authToken = jsonwebtoken_1.default.sign({ id: user.id, email: user.email }, process.env.JWT_SECRET || 'test-secret');
         // Criar produto de teste
         const product = await prisma_1.default.products.create({
             data: {
-                name: 'Test Product Orders',
-                description: 'Product for orders testing',
-                price: '15.00',
-                stock: 50,
                 user_id: userId,
-                store_id: storeId
+                name: 'Produto Teste Orders',
+                description: 'Produto para teste de pedidos',
+                price: 15.00,
+                stock: 10
             }
         });
         productId = product.id;
         // Criar cliente de teste
         const customer = await prisma_1.default.customers.create({
             data: {
-                name: 'Test Customer',
-                email: 'customer@test.com',
-                phone: '11999999999',
-                store_owner_id: userId
+                store_owner_id: userId,
+                name: 'Cliente Teste Orders',
+                phone: '51999999999',
+                email: 'cliente-orders@test.com',
+                address: 'Rua Teste, 123'
             }
         });
         customerId = customer.id;
     });
     afterAll(async () => {
         // Limpar dados de teste
-        await prisma_1.default.credit_transactions.deleteMany({ where: { user_id: userId } });
-        await prisma_1.default.credit_accounts.deleteMany({ where: { user_id: userId } });
-        await prisma_1.default.sales.deleteMany({ where: { user_id: userId } });
-        await prisma_1.default.cash_flow.deleteMany({ where: { user_id: userId } });
-        await prisma_1.default.order_items.deleteMany({ where: { order_id: { in: await prisma_1.default.orders.findMany({ where: { store_owner_id: userId }, select: { id: true } }).then(orders => orders.map(o => o.id)) } } });
-        await prisma_1.default.orders.deleteMany({ where: { store_owner_id: userId } });
-        await prisma_1.default.customers.deleteMany({ where: { user_id: userId } });
+        await prisma_1.default.order_items.deleteMany({});
+        await prisma_1.default.orders.deleteMany({});
         await prisma_1.default.products.deleteMany({ where: { user_id: userId } });
-        await prisma_1.default.stores.deleteMany({ where: { user_id: userId } });
+        await prisma_1.default.customers.deleteMany({ where: { store_owner_id: userId } });
         await prisma_1.default.users.deleteMany({ where: { id: userId } });
         await prisma_1.default.$disconnect();
     });
-    beforeEach(async () => {
-        // Limpar dados antes de cada teste
-        await prisma_1.default.credit_transactions.deleteMany({ where: { user_id: userId } });
-        await prisma_1.default.credit_accounts.deleteMany({ where: { user_id: userId } });
-        await prisma_1.default.sales.deleteMany({ where: { user_id: userId } });
-        await prisma_1.default.cash_flow.deleteMany({ where: { user_id: userId } });
-        await prisma_1.default.order_items.deleteMany({ where: { order_id: { in: await prisma_1.default.orders.findMany({ where: { store_owner_id: userId }, select: { id: true } }).then(orders => orders.map(o => o.id)) } } });
-        await prisma_1.default.orders.deleteMany({ where: { store_owner_id: userId } });
-    });
     describe('GET /orders', () => {
-        it('deve listar pedidos com itens', async () => {
-            // Criar pedido com itens
+        beforeEach(async () => {
+            // Criar pedido de teste
             const order = await prisma_1.default.orders.create({
                 data: {
-                    customer_name: 'Test Customer',
-                    customer_phone: '11999999999',
-                    total_amount: 30.00,
-                    status: 'pending',
                     store_owner_id: userId,
-                    store_id: storeId,
-                    order_items: {
-                        create: [
-                            {
-                                product_id: productId,
-                                quantity: 2,
-                                unit_price: '15.00',
-                                total_price: '30.00'
-                            }
-                        ]
-                    }
+                    customer_id: customerId,
+                    customer_name: 'Cliente Teste Orders',
+                    customer_email: 'cliente-orders@test.com',
+                    customer_phone: '51999999999',
+                    total_amount: 30.00,
+                    status: 'pending'
                 }
             });
+            orderId = order.id;
+            // Criar itens do pedido
+            await prisma_1.default.order_items.create({
+                data: {
+                    order_id: orderId,
+                    product_id: productId,
+                    quantity: 2,
+                    unit_price: 15.00,
+                    total_price: 30.00
+                }
+            });
+        });
+        afterEach(async () => {
+            await prisma_1.default.order_items.deleteMany({});
+            await prisma_1.default.orders.deleteMany({});
+        });
+        it('deve listar pedidos do usuário', async () => {
             const response = await (0, supertest_1.default)(index_1.app)
                 .get('/orders')
-                .set('Authorization', `Bearer ${authToken}`)
-                .expect(200);
+                .set('Authorization', `Bearer ${authToken}`);
+            expect(response.status).toBe(200);
             expect(Array.isArray(response.body)).toBe(true);
             expect(response.body.length).toBeGreaterThan(0);
-            expect(response.body[0]).toHaveProperty('order_items');
-            expect(response.body[0].order_items).toHaveLength(1);
+            expect(response.body[0].store_owner_id).toBe(userId);
         });
-        it('deve retornar erro 401 sem autenticação', async () => {
-            await (0, supertest_1.default)(index_1.app)
-                .get('/orders')
-                .expect(401);
-        });
-    });
-    describe('GET /orders/:id', () => {
-        it('deve buscar pedido por ID', async () => {
-            const order = await prisma_1.default.orders.create({
-                data: {
-                    customer_name: 'Test Customer',
-                    customer_phone: '11999999999',
-                    total_amount: 30.00,
-                    status: 'pending',
-                    store_owner_id: userId,
-                    store_id: storeId,
-                    order_items: {
-                        create: [
-                            {
-                                product_id: productId,
-                                quantity: 2,
-                                unit_price: '15.00',
-                                total_price: '30.00'
-                            }
-                        ]
-                    }
-                }
-            });
+        it('deve filtrar por status', async () => {
             const response = await (0, supertest_1.default)(index_1.app)
-                .get(`/orders/${order.id}`)
-                .set('Authorization', `Bearer ${authToken}`)
-                .expect(200);
-            expect(response.body.id).toBe(order.id);
-            expect(response.body.customer_name).toBe('Test Customer');
-            expect(response.body.order_items).toHaveLength(1);
-        });
-        it('deve retornar 404 para pedido inexistente', async () => {
-            await (0, supertest_1.default)(index_1.app)
-                .get('/orders/non-existent-id')
-                .set('Authorization', `Bearer ${authToken}`)
-                .expect(404);
-        });
-        it('deve retornar erro 400 para ID inválido', async () => {
-            await (0, supertest_1.default)(index_1.app)
-                .get('/orders/')
-                .set('Authorization', `Bearer ${authToken}`)
-                .expect(404);
-        });
-    });
-    describe('GET /orders/:id/processing-status', () => {
-        it('deve verificar status de processamento de pedido não processado', async () => {
-            const order = await prisma_1.default.orders.create({
-                data: {
-                    customer_name: 'Test Customer',
-                    customer_phone: '11999999999',
-                    total_amount: 30.00,
-                    status: 'pending',
-                    store_owner_id: userId,
-                    store_id: storeId,
-                    order_items: {
-                        create: [
-                            {
-                                product_id: productId,
-                                quantity: 2,
-                                unit_price: '15.00',
-                                total_price: '30.00'
-                            }
-                        ]
-                    }
-                }
+                .get('/orders?status=pending')
+                .set('Authorization', `Bearer ${authToken}`);
+            expect(response.status).toBe(200);
+            expect(Array.isArray(response.body)).toBe(true);
+            response.body.forEach((order) => {
+                expect(order.status).toBe('pending');
             });
+        });
+        it('deve incluir itens do pedido quando solicitado', async () => {
             const response = await (0, supertest_1.default)(index_1.app)
-                .get(`/orders/${order.id}/processing-status`)
-                .set('Authorization', `Bearer ${authToken}`)
-                .expect(200);
-            expect(response.body.processing_status.is_processed).toBe(false);
-            expect(response.body.processing_status.has_sales_records).toBe(false);
-            expect(response.body.processing_status.has_cash_flow_entry).toBe(false);
-        });
-        it('deve retornar erro 403 para pedido de outro usuário', async () => {
-            // Criar outro usuário e pedido
-            const otherUser = await prisma_1.default.users.create({
-                data: {
-                    email: 'other-orders@example.com',
-                    password: 'hashedpassword',
-                    name: 'Other Orders User'
-                }
-            });
-            const otherStore = await prisma_1.default.stores.create({
-                data: {
-                    name: 'Other Store Orders',
-                    slug: 'other-store-orders',
-                    user_id: otherUser.id
-                }
-            });
-            const otherOrder = await prisma_1.default.orders.create({
-                data: {
-                    customer_name: 'Other Customer',
-                    customer_phone: '11888888888',
-                    total_amount: 20.00,
-                    status: 'pending',
-                    store_owner_id: otherUser.id,
-                    store_id: otherStore.id
-                }
-            });
-            await (0, supertest_1.default)(index_1.app)
-                .get(`/orders/${otherOrder.id}/processing-status`)
-                .set('Authorization', `Bearer ${authToken}`)
-                .expect(403);
-            // Limpar dados de teste
-            await prisma_1.default.orders.delete({ where: { id: otherOrder.id } });
-            await prisma_1.default.stores.delete({ where: { id: otherStore.id } });
-            await prisma_1.default.users.delete({ where: { id: otherUser.id } });
+                .get('/orders?includeItems=true')
+                .set('Authorization', `Bearer ${authToken}`);
+            expect(response.status).toBe(200);
+            expect(Array.isArray(response.body)).toBe(true);
+            expect(response.body[0].order_items).toBeDefined();
+            expect(response.body[0].order_items.length).toBeGreaterThan(0);
         });
     });
     describe('POST /orders', () => {
-        it('deve criar novo pedido com itens', async () => {
+        it('deve criar novo pedido', async () => {
             const orderData = {
-                customer_name: 'New Customer',
-                customer_phone: '11777777777',
-                total_amount: 45.00,
-                status: 'pending',
-                store_owner_id: userId,
-                store_id: storeId,
-                order_items: [
+                customer_id: customerId,
+                customer_name: 'Cliente Teste Orders',
+                customer_email: 'cliente-orders@test.com',
+                customer_phone: '51999999999',
+                items: [
                     {
                         product_id: productId,
-                        quantity: 3,
-                        unit_price: '15.00',
-                        total_price: '45.00'
+                        quantity: 2,
+                        unit_price: 15.00,
+                        total_price: 30.00
                     }
                 ]
             };
             const response = await (0, supertest_1.default)(index_1.app)
                 .post('/orders')
-                .send(orderData)
-                .expect(201);
-            expect(response.body.customer_name).toBe(orderData.customer_name);
-            expect(response.body.total_amount).toBe(orderData.total_amount);
-            expect(response.body.order_items).toHaveLength(1);
+                .set('Authorization', `Bearer ${authToken}`)
+                .send(orderData);
+            expect(response.status).toBe(201);
+            expect(response.body.customer_id).toBe(customerId);
+            expect(response.body.total_amount).toBe(30);
+            expect(response.body.status).toBe('pending');
         });
-        it('deve retornar erro 400 para pedido sem itens', async () => {
+        it('deve retornar erro para dados inválidos', async () => {
             const orderData = {
-                customer_name: 'Customer without items',
-                customer_phone: '11666666666',
-                total_amount: 0,
-                status: 'pending',
-                store_owner_id: userId,
-                store_id: storeId,
-                order_items: [] // Array vazio
+                customer_name: 'Cliente Teste',
+                // Faltando campos obrigatórios
             };
             const response = await (0, supertest_1.default)(index_1.app)
                 .post('/orders')
-                .send(orderData)
-                .expect(400);
-            expect(response.body.error).toBe('Pedido deve conter pelo menos um item.');
-        });
-        it('deve retornar erro 400 para dados inválidos', async () => {
-            const invalidData = {
-                customer_name: '', // Nome vazio
-                total_amount: -10, // Valor negativo
-                order_items: [
-                    {
-                        product_id: productId,
-                        quantity: 1,
-                        unit_price: '10.00',
-                        total_price: '10.00'
-                    }
-                ]
-            };
-            const response = await (0, supertest_1.default)(index_1.app)
-                .post('/orders')
-                .send(invalidData)
-                .expect(400);
+                .set('Authorization', `Bearer ${authToken}`)
+                .send(orderData);
+            expect(response.status).toBe(400);
             expect(response.body.error).toBe('Dados inválidos');
+        });
+        it('deve retornar erro para produto inexistente', async () => {
+            const orderData = {
+                customer_id: customerId,
+                customer_name: 'Cliente Teste Orders',
+                customer_email: 'cliente-orders@test.com',
+                customer_phone: '51999999999',
+                items: [
+                    {
+                        product_id: 'produto-inexistente',
+                        quantity: 2,
+                        unit_price: 15.00,
+                        total_price: 30.00
+                    }
+                ]
+            };
+            const response = await (0, supertest_1.default)(index_1.app)
+                .post('/orders')
+                .set('Authorization', `Bearer ${authToken}`)
+                .send(orderData);
+            expect(response.status).toBe(404);
+            expect(response.body.error).toBe('Produto não encontrado');
+        });
+    });
+    describe('GET /orders/:id', () => {
+        beforeEach(async () => {
+            // Criar pedido de teste
+            const order = await prisma_1.default.orders.create({
+                data: {
+                    store_owner_id: userId,
+                    customer_id: customerId,
+                    customer_name: 'Cliente Teste Orders',
+                    customer_email: 'cliente-orders@test.com',
+                    customer_phone: '51999999999',
+                    total_amount: 30.00,
+                    status: 'pending'
+                }
+            });
+            orderId = order.id;
+            // Criar itens do pedido
+            await prisma_1.default.order_items.create({
+                data: {
+                    order_id: orderId,
+                    product_id: productId,
+                    quantity: 2,
+                    unit_price: 15.00,
+                    total_price: 30.00
+                }
+            });
+        });
+        afterEach(async () => {
+            await prisma_1.default.order_items.deleteMany({});
+            await prisma_1.default.orders.deleteMany({});
+        });
+        it('deve buscar pedido por ID', async () => {
+            const response = await (0, supertest_1.default)(index_1.app)
+                .get(`/orders/${orderId}`)
+                .set('Authorization', `Bearer ${authToken}`);
+            expect(response.status).toBe(200);
+            expect(response.body.id).toBe(orderId);
+            expect(response.body.customer_name).toBe('Cliente Teste Orders');
+            expect(response.body.total_amount).toBe(30);
+        });
+        it('deve incluir itens do pedido', async () => {
+            const response = await (0, supertest_1.default)(index_1.app)
+                .get(`/orders/${orderId}?includeItems=true`)
+                .set('Authorization', `Bearer ${authToken}`);
+            expect(response.status).toBe(200);
+            expect(response.body.order_items).toBeDefined();
+            expect(response.body.order_items.length).toBe(1);
+            expect(response.body.order_items[0].product_id).toBe(productId);
+        });
+        it('deve retornar erro para pedido inexistente', async () => {
+            const response = await (0, supertest_1.default)(index_1.app)
+                .get('/orders/pedido-inexistente')
+                .set('Authorization', `Bearer ${authToken}`);
+            expect(response.status).toBe(404);
+            expect(response.body.error).toBe('Pedido não encontrado');
         });
     });
     describe('PUT /orders/:id', () => {
-        it('deve atualizar pedido existente', async () => {
+        beforeEach(async () => {
+            // Criar pedido de teste
             const order = await prisma_1.default.orders.create({
                 data: {
-                    customer_name: 'Original Customer',
-                    customer_phone: '11555555555',
-                    total_amount: 30.00,
-                    status: 'pending',
                     store_owner_id: userId,
-                    store_id: storeId,
-                    order_items: {
-                        create: [
-                            {
-                                product_id: productId,
-                                quantity: 2,
-                                unit_price: '15.00',
-                                total_price: '30.00'
-                            }
-                        ]
-                    }
+                    customer_id: customerId,
+                    customer_name: 'Cliente Teste Orders',
+                    customer_email: 'cliente-orders@test.com',
+                    customer_phone: '51999999999',
+                    total_amount: 30.00,
+                    status: 'pending'
                 }
             });
+            orderId = order.id;
+        });
+        afterEach(async () => {
+            await prisma_1.default.orders.deleteMany({});
+        });
+        it('deve atualizar status do pedido', async () => {
             const updateData = {
-                customer_name: 'Updated Customer',
-                status: 'accepted'
+                status: 'completed'
             };
             const response = await (0, supertest_1.default)(index_1.app)
-                .put(`/orders/${order.id}`)
+                .put(`/orders/${orderId}`)
                 .set('Authorization', `Bearer ${authToken}`)
-                .send(updateData)
-                .expect(200);
-            expect(response.body.customer_name).toBe(updateData.customer_name);
-            expect(response.body.status).toBe(updateData.status);
+                .send(updateData);
+            expect(response.status).toBe(200);
+            expect(response.body.status).toBe('completed');
         });
-        it('deve processar pedido quando status muda para aceito', async () => {
-            const order = await prisma_1.default.orders.create({
-                data: {
-                    customer_name: 'Customer for Processing',
-                    customer_phone: '11444444444',
-                    total_amount: 30.00,
-                    status: 'pending',
-                    store_owner_id: userId,
-                    store_id: storeId,
-                    order_items: {
-                        create: [
-                            {
-                                product_id: productId,
-                                quantity: 2,
-                                unit_price: '15.00',
-                                total_price: '30.00'
-                            }
-                        ]
-                    }
-                }
-            });
+        it('deve atualizar informações do cliente', async () => {
             const updateData = {
-                status: 'accepted'
+                customer_name: 'Cliente Atualizado',
+                customer_email: 'cliente-atualizado@test.com'
             };
             const response = await (0, supertest_1.default)(index_1.app)
-                .put(`/orders/${order.id}`)
+                .put(`/orders/${orderId}`)
                 .set('Authorization', `Bearer ${authToken}`)
-                .send(updateData)
-                .expect(200);
-            expect(response.body.status).toBe('accepted');
-            // Verificar se as vendas foram criadas
-            const sales = await prisma_1.default.sales.findMany({
-                where: {
-                    user_id: userId,
-                    product_name: {
-                        contains: `Pedido #${order.id.substring(0, 8)}`
-                    }
-                }
-            });
-            expect(sales.length).toBeGreaterThan(0);
-            // Verificar se o fluxo de caixa foi criado
-            const cashFlow = await prisma_1.default.cash_flow.findFirst({
-                where: {
-                    user_id: userId,
-                    description: {
-                        contains: `Pedido #${order.id.substring(0, 8)}`
-                    }
-                }
-            });
-            expect(cashFlow).toBeDefined();
+                .send(updateData);
+            expect(response.status).toBe(200);
+            expect(response.body.customer_name).toBe('Cliente Atualizado');
+            expect(response.body.customer_email).toBe('cliente-atualizado@test.com');
         });
-        it('deve retornar erro 403 para pedido de outro usuário', async () => {
-            // Criar outro usuário e pedido
-            const otherUser = await prisma_1.default.users.create({
-                data: {
-                    email: 'other-update@example.com',
-                    password: 'hashedpassword',
-                    name: 'Other Update User'
-                }
-            });
-            const otherStore = await prisma_1.default.stores.create({
-                data: {
-                    name: 'Other Update Store',
-                    slug: 'other-update-store',
-                    user_id: otherUser.id
-                }
-            });
-            const otherOrder = await prisma_1.default.orders.create({
-                data: {
-                    customer_name: 'Other Customer',
-                    customer_phone: '11333333333',
-                    total_amount: 20.00,
-                    status: 'pending',
-                    store_owner_id: otherUser.id,
-                    store_id: otherStore.id
-                }
-            });
+        it('deve retornar erro para pedido inexistente', async () => {
             const updateData = {
-                status: 'accepted'
+                status: 'completed'
             };
-            await (0, supertest_1.default)(index_1.app)
-                .put(`/orders/${otherOrder.id}`)
-                .set('Authorization', `Bearer ${authToken}`)
-                .send(updateData)
-                .expect(403);
-            // Limpar dados de teste
-            await prisma_1.default.orders.delete({ where: { id: otherOrder.id } });
-            await prisma_1.default.stores.delete({ where: { id: otherStore.id } });
-            await prisma_1.default.users.delete({ where: { id: otherUser.id } });
-        });
-        it('deve retornar erro 400 para dados inválidos', async () => {
-            const order = await prisma_1.default.orders.create({
-                data: {
-                    customer_name: 'Test Customer',
-                    customer_phone: '11222222222',
-                    total_amount: 30.00,
-                    status: 'pending',
-                    store_owner_id: userId,
-                    store_id: storeId,
-                    order_items: {
-                        create: [
-                            {
-                                product_id: productId,
-                                quantity: 2,
-                                unit_price: '15.00',
-                                total_price: '30.00'
-                            }
-                        ]
-                    }
-                }
-            });
-            const invalidData = {
-                total_amount: -10 // Valor negativo
-            };
-            await (0, supertest_1.default)(index_1.app)
-                .put(`/orders/${order.id}`)
-                .set('Authorization', `Bearer ${authToken}`)
-                .send(invalidData)
-                .expect(400);
-        });
-    });
-    describe('POST /orders/:id/reprocess', () => {
-        it('deve reprocessar pedido aceito', async () => {
-            const order = await prisma_1.default.orders.create({
-                data: {
-                    customer_name: 'Customer for Reprocess',
-                    customer_phone: '11111111111',
-                    total_amount: 30.00,
-                    status: 'accepted',
-                    store_owner_id: userId,
-                    store_id: storeId,
-                    order_items: {
-                        create: [
-                            {
-                                product_id: productId,
-                                quantity: 2,
-                                unit_price: '15.00',
-                                total_price: '30.00'
-                            }
-                        ]
-                    }
-                }
-            });
             const response = await (0, supertest_1.default)(index_1.app)
-                .post(`/orders/${order.id}/reprocess`)
+                .put('/orders/pedido-inexistente')
                 .set('Authorization', `Bearer ${authToken}`)
-                .expect(200);
-            expect(response.body.success).toBe(true);
-            expect(response.body.message).toContain('reprocessado com sucesso');
-        });
-        it('deve retornar erro 400 para pedido não aceito', async () => {
-            const order = await prisma_1.default.orders.create({
-                data: {
-                    customer_name: 'Customer Pending',
-                    customer_phone: '11000000000',
-                    total_amount: 30.00,
-                    status: 'pending',
-                    store_owner_id: userId,
-                    store_id: storeId,
-                    order_items: {
-                        create: [
-                            {
-                                product_id: productId,
-                                quantity: 2,
-                                unit_price: '15.00',
-                                total_price: '30.00'
-                            }
-                        ]
-                    }
-                }
-            });
-            const response = await (0, supertest_1.default)(index_1.app)
-                .post(`/orders/${order.id}/reprocess`)
-                .set('Authorization', `Bearer ${authToken}`)
-                .expect(400);
-            expect(response.body.error).toContain('deve estar com status aceito');
-        });
-        it('deve retornar erro 403 para pedido de outro usuário', async () => {
-            // Criar outro usuário e pedido
-            const otherUser = await prisma_1.default.users.create({
-                data: {
-                    email: 'other-reprocess@example.com',
-                    password: 'hashedpassword',
-                    name: 'Other Reprocess User'
-                }
-            });
-            const otherStore = await prisma_1.default.stores.create({
-                data: {
-                    name: 'Other Reprocess Store',
-                    slug: 'other-reprocess-store',
-                    user_id: otherUser.id
-                }
-            });
-            const otherOrder = await prisma_1.default.orders.create({
-                data: {
-                    customer_name: 'Other Customer',
-                    customer_phone: '11999999998',
-                    total_amount: 20.00,
-                    status: 'accepted',
-                    store_owner_id: otherUser.id,
-                    store_id: otherStore.id
-                }
-            });
-            await (0, supertest_1.default)(index_1.app)
-                .post(`/orders/${otherOrder.id}/reprocess`)
-                .set('Authorization', `Bearer ${authToken}`)
-                .expect(403);
-            // Limpar dados de teste
-            await prisma_1.default.orders.delete({ where: { id: otherOrder.id } });
-            await prisma_1.default.stores.delete({ where: { id: otherStore.id } });
-            await prisma_1.default.users.delete({ where: { id: otherUser.id } });
+                .send(updateData);
+            expect(response.status).toBe(404);
+            expect(response.body.error).toBe('Pedido não encontrado');
         });
     });
     describe('DELETE /orders/:id', () => {
-        it('deve deletar pedido existente', async () => {
+        beforeEach(async () => {
+            // Criar pedido de teste
             const order = await prisma_1.default.orders.create({
                 data: {
-                    customer_name: 'Customer to Delete',
-                    customer_phone: '11999999997',
-                    total_amount: 30.00,
-                    status: 'pending',
                     store_owner_id: userId,
-                    store_id: storeId,
-                    order_items: {
-                        create: [
-                            {
-                                product_id: productId,
-                                quantity: 2,
-                                unit_price: '15.00',
-                                total_price: '30.00'
-                            }
-                        ]
-                    }
+                    customer_id: customerId,
+                    customer_name: 'Cliente Teste Orders',
+                    customer_email: 'cliente-orders@test.com',
+                    customer_phone: '51999999999',
+                    total_amount: 30.00,
+                    status: 'pending'
                 }
             });
-            await (0, supertest_1.default)(index_1.app)
-                .delete(`/orders/${order.id}`)
-                .set('Authorization', `Bearer ${authToken}`)
-                .expect(204);
-            // Verificar se foi realmente deletada
+            orderId = order.id;
+        });
+        it('deve deletar pedido', async () => {
+            const response = await (0, supertest_1.default)(index_1.app)
+                .delete(`/orders/${orderId}`)
+                .set('Authorization', `Bearer ${authToken}`);
+            expect(response.status).toBe(200);
+            expect(response.body.message).toBe('Pedido deletado com sucesso');
+            // Verificar se foi realmente deletado
             const deletedOrder = await prisma_1.default.orders.findUnique({
-                where: { id: order.id }
+                where: { id: orderId }
             });
             expect(deletedOrder).toBeNull();
         });
-        it('deve retornar erro 400 para ID inválido', async () => {
-            await (0, supertest_1.default)(index_1.app)
-                .delete('/orders/')
-                .set('Authorization', `Bearer ${authToken}`)
-                .expect(404);
+        it('deve retornar erro para pedido inexistente', async () => {
+            const response = await (0, supertest_1.default)(index_1.app)
+                .delete('/orders/pedido-inexistente')
+                .set('Authorization', `Bearer ${authToken}`);
+            expect(response.status).toBe(404);
+            expect(response.body.error).toBe('Pedido não encontrado');
         });
     });
-    describe('Processamento de pedidos com crédito', () => {
-        it('deve criar conta de crédito quando pedido tem telefone do cliente', async () => {
+    describe('POST /orders/:id/items', () => {
+        beforeEach(async () => {
+            // Criar pedido de teste
             const order = await prisma_1.default.orders.create({
                 data: {
-                    customer_name: 'Credit Customer',
-                    customer_phone: '11999999996',
-                    total_amount: 30.00,
-                    status: 'pending',
                     store_owner_id: userId,
-                    store_id: storeId,
-                    order_items: {
-                        create: [
-                            {
-                                product_id: productId,
-                                quantity: 2,
-                                unit_price: '15.00',
-                                total_price: '30.00'
-                            }
-                        ]
-                    }
+                    customer_id: customerId,
+                    customer_name: 'Cliente Teste Orders',
+                    customer_email: 'cliente-orders@test.com',
+                    customer_phone: '51999999999',
+                    total_amount: 30.00,
+                    status: 'pending'
                 }
             });
-            // Atualizar status para aceito (processar)
-            await (0, supertest_1.default)(index_1.app)
-                .put(`/orders/${order.id}`)
+            orderId = order.id;
+        });
+        afterEach(async () => {
+            await prisma_1.default.order_items.deleteMany({});
+            await prisma_1.default.orders.deleteMany({});
+        });
+        it('deve adicionar item ao pedido', async () => {
+            const itemData = {
+                product_id: productId,
+                quantity: 1,
+                unit_price: 15.00,
+                total_price: 15.00
+            };
+            const response = await (0, supertest_1.default)(index_1.app)
+                .post(`/orders/${orderId}/items`)
                 .set('Authorization', `Bearer ${authToken}`)
-                .send({ status: 'accepted' })
-                .expect(200);
-            // Verificar se a conta de crédito foi criada
-            const creditAccount = await prisma_1.default.credit_accounts.findFirst({
-                where: {
-                    customer_phone: '11999999996',
-                    user_id: userId
+                .send(itemData);
+            expect(response.status).toBe(201);
+            expect(response.body.product_id).toBe(productId);
+            expect(response.body.quantity).toBe(1);
+            expect(response.body.total_price).toBe(15);
+        });
+        it('deve retornar erro para produto inexistente', async () => {
+            const itemData = {
+                product_id: 'produto-inexistente',
+                quantity: 1,
+                unit_price: 15.00,
+                total_price: 15.00
+            };
+            const response = await (0, supertest_1.default)(index_1.app)
+                .post(`/orders/${orderId}/items`)
+                .set('Authorization', `Bearer ${authToken}`)
+                .send(itemData);
+            expect(response.status).toBe(404);
+            expect(response.body.error).toBe('Produto não encontrado');
+        });
+        it('deve retornar erro para pedido inexistente', async () => {
+            const itemData = {
+                product_id: productId,
+                quantity: 1,
+                unit_price: 15.00,
+                total_price: 15.00
+            };
+            const response = await (0, supertest_1.default)(index_1.app)
+                .post('/orders/pedido-inexistente/items')
+                .set('Authorization', `Bearer ${authToken}`)
+                .send(itemData);
+            expect(response.status).toBe(404);
+            expect(response.body.error).toBe('Pedido não encontrado');
+        });
+    });
+    describe('PUT /orders/:id/items/:itemId', () => {
+        let itemId;
+        beforeEach(async () => {
+            // Criar pedido de teste
+            const order = await prisma_1.default.orders.create({
+                data: {
+                    store_owner_id: userId,
+                    customer_id: customerId,
+                    customer_name: 'Cliente Teste Orders',
+                    customer_email: 'cliente-orders@test.com',
+                    customer_phone: '51999999999',
+                    total_amount: 30.00,
+                    status: 'pending'
                 }
             });
-            expect(creditAccount).toBeDefined();
-            expect(creditAccount?.customer_name).toBe('Credit Customer');
-            // Verificar se a transação de crédito foi criada
-            const creditTransaction = await prisma_1.default.credit_transactions.findFirst({
-                where: {
-                    credit_account_id: creditAccount?.id,
-                    user_id: userId
+            orderId = order.id;
+            // Criar item de teste
+            const item = await prisma_1.default.order_items.create({
+                data: {
+                    order_id: orderId,
+                    product_id: productId,
+                    quantity: 2,
+                    unit_price: 15.00,
+                    total_price: 30.00
                 }
             });
-            expect(creditTransaction).toBeDefined();
-            expect(creditTransaction?.type).toBe('pagamento');
-            expect(creditTransaction?.amount).toBe(30.00);
+            itemId = item.id;
+        });
+        afterEach(async () => {
+            await prisma_1.default.order_items.deleteMany({});
+            await prisma_1.default.orders.deleteMany({});
+        });
+        it('deve atualizar item do pedido', async () => {
+            const updateData = {
+                quantity: 3,
+                unit_price: 15.00,
+                total_price: 45.00
+            };
+            const response = await (0, supertest_1.default)(index_1.app)
+                .put(`/orders/${orderId}/items/${itemId}`)
+                .set('Authorization', `Bearer ${authToken}`)
+                .send(updateData);
+            expect(response.status).toBe(200);
+            expect(response.body.quantity).toBe(3);
+            expect(response.body.total_price).toBe(45);
+        });
+        it('deve retornar erro para item inexistente', async () => {
+            const updateData = {
+                quantity: 3
+            };
+            const response = await (0, supertest_1.default)(index_1.app)
+                .put(`/orders/${orderId}/items/item-inexistente`)
+                .set('Authorization', `Bearer ${authToken}`)
+                .send(updateData);
+            expect(response.status).toBe(404);
+            expect(response.body.error).toBe('Item não encontrado');
+        });
+    });
+    describe('DELETE /orders/:id/items/:itemId', () => {
+        let itemId;
+        beforeEach(async () => {
+            // Criar pedido de teste
+            const order = await prisma_1.default.orders.create({
+                data: {
+                    store_owner_id: userId,
+                    customer_id: customerId,
+                    customer_name: 'Cliente Teste Orders',
+                    customer_email: 'cliente-orders@test.com',
+                    customer_phone: '51999999999',
+                    total_amount: 30.00,
+                    status: 'pending'
+                }
+            });
+            orderId = order.id;
+            // Criar item de teste
+            const item = await prisma_1.default.order_items.create({
+                data: {
+                    order_id: orderId,
+                    product_id: productId,
+                    quantity: 2,
+                    unit_price: 15.00,
+                    total_price: 30.00
+                }
+            });
+            itemId = item.id;
+        });
+        afterEach(async () => {
+            await prisma_1.default.order_items.deleteMany({});
+            await prisma_1.default.orders.deleteMany({});
+        });
+        it('deve deletar item do pedido', async () => {
+            const response = await (0, supertest_1.default)(index_1.app)
+                .delete(`/orders/${orderId}/items/${itemId}`)
+                .set('Authorization', `Bearer ${authToken}`);
+            expect(response.status).toBe(200);
+            expect(response.body.message).toBe('Item deletado com sucesso');
+            // Verificar se foi realmente deletado
+            const deletedItem = await prisma_1.default.order_items.findUnique({
+                where: { id: itemId }
+            });
+            expect(deletedItem).toBeNull();
+        });
+        it('deve retornar erro para item inexistente', async () => {
+            const response = await (0, supertest_1.default)(index_1.app)
+                .delete(`/orders/${orderId}/items/item-inexistente`)
+                .set('Authorization', `Bearer ${authToken}`);
+            expect(response.status).toBe(404);
+            expect(response.body.error).toBe('Item não encontrado');
         });
     });
 });

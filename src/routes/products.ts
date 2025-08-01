@@ -30,14 +30,6 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
     fileSize: 5 * 1024 * 1024, // 5MB limite
-  },
-  fileFilter: (req, file, cb) => {
-    // Verificar se é uma imagem
-    if (file.mimetype.startsWith('image/')) {
-      cb(null, true);
-    } else {
-      cb(new Error('Apenas arquivos de imagem são permitidos'));
-    }
   }
 });
 

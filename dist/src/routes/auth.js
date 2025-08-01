@@ -8,11 +8,18 @@ const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const prisma_1 = __importDefault(require("../lib/prisma"));
 const auth_1 = __importDefault(require("../middleware/auth"));
+const uuid_1 = require("uuid");
 const router = (0, express_1.Router)();
 router.post('/register', async (req, res) => {
     const { email, password } = req.body;
     const hash = await bcryptjs_1.default.hash(password, 10);
-    const user = await prisma_1.default.users.create({ data: { email, encrypted_password: hash } });
+    const user = await prisma_1.default.users.create({
+        data: {
+            id: (0, uuid_1.v4)(),
+            email,
+            encrypted_password: hash
+        }
+    });
     res.json(user);
 });
 router.post('/login', async (req, res) => {
@@ -21,7 +28,7 @@ router.post('/login', async (req, res) => {
         if (!email || !password) {
             return res.status(400).json({ error: 'Email e senha são obrigatórios' });
         }
-        const user = await prisma_1.default.users.findUnique({ where: { email } });
+        const user = await prisma_1.default.users.findFirst({ where: { email } });
         if (!user) {
             return res.status(401).json({ error: 'Credenciais inválidas' });
         }

@@ -94,7 +94,7 @@ export const credit_installmentsUpdateInputSchema = z.object({
 
 // Categories
 export const categoriesCreateInputSchema = z.object({
-  name: z.string(),
+  name: z.string().min(1, 'Nome da categoria é obrigatório'),
   color: z.string().optional(),
   image: z.string().optional(),
   storeId: z.string().optional(),
@@ -130,9 +130,9 @@ export const customersUpdateInputSchema = z.object({
 export const credit_accountsCreateInputSchema = z.object({
   user_id: z.string().optional(), // Tornar opcional pois será definido pelo middleware
   store_id: z.string().optional(),
-  customer_id: z.string().min(1, 'ID do cliente é obrigatório'), // Novo campo obrigatório
-  customer_name: z.string().optional(), // Opcional pois virá do cliente
-  customer_phone: z.string().optional(), // Opcional pois virá do cliente
+  customer_id: z.string().optional(), // Opcional pois pode criar crediário sem cliente existente
+  customer_name: z.string().min(1, 'Nome do cliente é obrigatório'),
+  customer_phone: z.string().min(1, 'Telefone do cliente é obrigatório'),
   customer_address: z.string().optional(),
   total_debt: z.union([
     z.number().optional().default(0),

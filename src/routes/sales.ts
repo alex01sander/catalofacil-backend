@@ -72,16 +72,103 @@ router.get('/',
       // Converter valores decimais para números
       const vendasComValoresNumericos = vendas.map(venda => ({
         ...venda,
-        unit_price: parseFloat(venda.unit_price.toString()),
-        total_price: parseFloat(venda.total_price.toString())
+        unit_price: Number(venda.unit_price),
+        total_price: Number(venda.total_price)
       }));
       
       const response = createPaginatedResponse(vendasComValoresNumericos, totalCount, req.pagination!);
-      res.json(response);
+      res.json(response.data || response);
     } catch (error) {
       console.error('Erro ao listar vendas:', error);
       res.status(500).json({ error: 'Erro interno do servidor' });
     }
+});
+
+// Resumo das vendas
+router.get('/summary', authenticateJWT, userRateLimit, async (req, res) => {
+  if (!req.user) return res.status(401).json({ error: 'Usuário não autenticado' });
+
+  try {
+    const { start_date, end_date } = req.query;
+    
+    let whereClause: any = { user_id: req.user.id };
+    
+    if (start_date && end_date) {
+      whereClause.sale_date = {
+        gte: new Date(start_date as string),
+        lte: new Date(end_date as string)
+      };
+    }
+
+    const vendas = await prisma.sales.findMany({
+      where: whereClause,
+      select: {
+        total_price: true,
+        quantity: true,
+        status: true
+      }
+    });
+
+    const totalSales = vendas.length;
+    const totalRevenue = vendas.reduce((sum, venda) => sum + Number(venda.total_price), 0);
+    const averageTicket = totalSales > 0 ? totalRevenue / totalSales : 0;
+
+    // Contar vendas por status
+    const completedSales = vendas.filter(venda => venda.status === 'completed').length;
+    const cancelledSales = vendas.filter(venda => venda.status === 'cancelled').length;
+
+    res.json({
+      totalSales,
+      totalRevenue,
+      averageTicket: Number(averageTicket.toFixed(2)),
+      completedSales,
+      cancelledSales
+    });
+  } catch (error) {
+    console.error('❌ [Sales] Erro ao buscar resumo:', error);
+    res.status(500).json({ 
+      error: 'Erro ao buscar resumo das vendas',
+      details: error instanceof Error ? error.message : 'Erro desconhecido'
+    });
+  }
+});
+
+// Produtos mais vendidos
+router.get('/top-products', authenticateJWT, userRateLimit, async (req, res) => {
+  if (!req.user) return res.status(401).json({ error: 'Usuário não autenticado' });
+
+  try {
+    const limit = parseInt(req.query.limit as string) || 10;
+    
+    const topProducts = await prisma.sales.groupBy({
+      by: ['product_name'],
+      where: { user_id: req.user.id },
+      _sum: {
+        quantity: true,
+        total_price: true
+      },
+      orderBy: {
+        _sum: {
+          quantity: 'desc'
+        }
+      },
+      take: limit
+    });
+
+    const result = topProducts.map(product => ({
+      product_name: product.product_name,
+      total_quantity: product._sum.quantity,
+      total_revenue: product._sum.total_price
+    }));
+
+    res.json(result);
+  } catch (error) {
+    console.error('❌ [Sales] Erro ao buscar produtos mais vendidos:', error);
+    res.status(500).json({ 
+      error: 'Erro ao buscar produtos mais vendidos',
+      details: error instanceof Error ? error.message : 'Erro desconhecido'
+    });
+  }
 });
 
 // Buscar venda por ID
@@ -90,13 +177,27 @@ router.get('/:id', authenticateJWT, async (req, res) => {
   if (!parse.success) {
     return res.status(400).json({ error: 'Parâmetro inválido', details: parse.error.issues });
   }
+
+  // Validar formato UUID
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!uuidRegex.test(req.params.id)) {
+    return res.status(404).json({ error: 'Venda não encontrada' });
+  }
   try {
     const venda = await prisma.sales.findUnique({
       where: { id: req.params.id },
       include: { stores: true }
     });
     if (!venda) return res.status(404).json({ error: 'Venda não encontrada' });
-    res.json(venda);
+    
+    // Converter valores decimais para números
+    const vendaComValoresNumericos = {
+      ...venda,
+      unit_price: Number(venda.unit_price),
+      total_price: Number(venda.total_price)
+    };
+    
+    res.json(vendaComValoresNumericos);
   } catch (error) {
     console.error('Erro ao buscar venda:', error);
     res.status(500).json({ error: 'Erro interno do servidor' });
@@ -151,8 +252,15 @@ router.post('/', authenticateJWT, userRateLimit, async (req, res) => {
     // Limpar cache do usuário após criar venda
     clearUserCache(req.user.id);
     
+    // Converter valores decimais para números
+    const novaComValoresNumericos = {
+      ...nova,
+      unit_price: Number(nova.unit_price),
+      total_price: Number(nova.total_price)
+    };
+    
     console.log('✅ [Sales] Venda criada com sucesso:', nova.id);
-    res.status(201).json(nova);
+    res.status(201).json(novaComValoresNumericos);
   } catch (error) {
     console.error('❌ [Sales] Erro ao criar venda:', error);
     res.status(500).json({ 
@@ -168,6 +276,12 @@ router.put('/:id', authenticateJWT, async (req, res) => {
   if (!parse.success) {
     return res.status(400).json({ error: 'Parâmetro inválido', details: parse.error.issues });
   }
+
+  // Validar formato UUID
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!uuidRegex.test(req.params.id)) {
+    return res.status(404).json({ error: 'Venda não encontrada' });
+  }
   const parseBody = salesUpdateInputSchema.safeParse(req.body);
   if (!parseBody.success) {
     return res.status(400).json({ error: 'Dados inválidos', details: parseBody.error.issues });
@@ -178,7 +292,15 @@ router.put('/:id', authenticateJWT, async (req, res) => {
       where: { id: req.params.id },
       data: parseBody.data,
     });
-    res.json(atualizada);
+    
+    // Converter valores decimais para números
+    const atualizadaComValoresNumericos = {
+      ...atualizada,
+      unit_price: Number(atualizada.unit_price),
+      total_price: Number(atualizada.total_price)
+    };
+    
+    res.json(atualizadaComValoresNumericos);
   } catch (error) {
     console.error('Erro ao atualizar venda:', error);
     res.status(500).json({ error: 'Erro interno do servidor' });
@@ -191,9 +313,15 @@ router.delete('/:id', authenticateJWT, async (req, res) => {
   if (!parse.success) {
     return res.status(400).json({ error: 'Parâmetro inválido', details: parse.error.issues });
   }
+
+  // Validar formato UUID
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!uuidRegex.test(req.params.id)) {
+    return res.status(404).json({ error: 'Venda não encontrada' });
+  }
   try {
     await prisma.sales.delete({ where: { id: req.params.id } });
-    res.status(204).send();
+    res.status(200).json({ message: 'Venda deletada com sucesso' });
   } catch (error) {
     console.error('Erro ao deletar venda:', error);
     res.status(500).json({ error: 'Erro interno do servidor' });
@@ -328,6 +456,54 @@ router.post('/product-sale', authenticateJWT, userRateLimit, async (req, res) =>
     res.status(500).json({ 
       error: 'Erro interno do servidor', 
       details: error instanceof Error ? error.message : 'Erro desconhecido' 
+    });
+  }
+});
+
+// Criar múltiplas vendas
+router.post('/bulk', authenticateJWT, userRateLimit, async (req, res) => {
+  if (!req.user) return res.status(401).json({ error: 'Usuário não autenticado' });
+
+  try {
+    const { sales } = req.body;
+
+    if (!Array.isArray(sales) || sales.length === 0) {
+      return res.status(400).json({ error: 'Dados inválidos' });
+    }
+
+    const vendasCriadas = [];
+
+    for (const saleData of sales) {
+      const { product_name, quantity, unit_price, sale_date } = saleData;
+      
+      if (!product_name || !quantity || !unit_price) {
+        return res.status(400).json({ error: 'Dados inválidos' });
+      }
+
+      const total_price = Number(unit_price) * quantity;
+      const data_venda = sale_date ? new Date(sale_date) : new Date();
+
+      const venda = await prisma.sales.create({
+        data: {
+          user_id: req.user.id,
+          product_name,
+          quantity,
+          unit_price: Number(unit_price),
+          total_price,
+          sale_date: data_venda,
+          status: 'completed'
+        }
+      });
+
+      vendasCriadas.push(venda);
+    }
+
+    res.status(201).json(vendasCriadas);
+  } catch (error) {
+    console.error('❌ [Sales] Erro ao criar vendas em lote:', error);
+    res.status(500).json({ 
+      error: 'Erro ao criar vendas em lote',
+      details: error instanceof Error ? error.message : 'Erro desconhecido'
     });
   }
 });

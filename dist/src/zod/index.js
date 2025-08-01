@@ -87,7 +87,7 @@ exports.credit_installmentsUpdateInputSchema = zod_1.z.object({
 });
 // Categories
 exports.categoriesCreateInputSchema = zod_1.z.object({
-    name: zod_1.z.string(),
+    name: zod_1.z.string().min(1, 'Nome da categoria é obrigatório'),
     color: zod_1.z.string().optional(),
     image: zod_1.z.string().optional(),
     storeId: zod_1.z.string().optional(),
@@ -119,6 +119,7 @@ exports.customersUpdateInputSchema = zod_1.z.object({
 exports.credit_accountsCreateInputSchema = zod_1.z.object({
     user_id: zod_1.z.string().optional(), // Tornar opcional pois será definido pelo middleware
     store_id: zod_1.z.string().optional(),
+    customer_id: zod_1.z.string().optional(), // Opcional pois pode criar crediário sem cliente existente
     customer_name: zod_1.z.string().min(1, 'Nome do cliente é obrigatório'),
     customer_phone: zod_1.z.string().min(1, 'Telefone do cliente é obrigatório'),
     customer_address: zod_1.z.string().optional(),
@@ -136,6 +137,7 @@ exports.credit_accountsCreateInputSchema = zod_1.z.object({
 exports.credit_accountsUpdateInputSchema = zod_1.z.object({
     user_id: zod_1.z.string().optional(),
     store_id: zod_1.z.string().optional(),
+    customer_id: zod_1.z.string().optional(),
     customer_name: zod_1.z.string().optional(),
     customer_phone: zod_1.z.string().optional(),
     customer_address: zod_1.z.string().optional(),

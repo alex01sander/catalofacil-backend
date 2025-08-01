@@ -3,13 +3,20 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import prisma from '../lib/prisma';
 import authenticateJWT from '../middleware/auth';
+import { v4 as uuidv4 } from 'uuid';
 
 const router = Router();
 
 router.post('/register', async (req, res) => {
   const { email, password } = req.body;
   const hash = await bcrypt.hash(password, 10);
-  const user = await prisma.users.create({ data: { email, encrypted_password: hash } });
+  const user = await prisma.users.create({ 
+    data: { 
+      id: uuidv4(),
+      email, 
+      encrypted_password: hash 
+    } 
+  });
   res.json(user);
 });
 
@@ -21,7 +28,7 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ error: 'Email e senha são obrigatórios' });
     }
     
-    const user = await prisma.users.findUnique({ where: { email } });
+    const user = await prisma.users.findFirst({ where: { email } });
     
     if (!user) {
       return res.status(401).json({ error: 'Credenciais inválidas' });

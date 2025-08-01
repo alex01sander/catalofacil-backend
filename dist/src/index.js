@@ -256,8 +256,11 @@ process.on('SIGINT', async () => {
     }
     process.exit(0);
 });
-app.listen(PORT, () => {
-    console.log(`🚀 Servidor rodando na porta ${PORT}`);
-    console.log(`📊 Ambiente: ${process.env.NODE_ENV || 'development'}`);
-    console.log(`🌐 URL: ${process.env.RAILWAY_PUBLIC_DOMAIN || 'localhost'}`);
-});
+// Só iniciar o servidor se não estiver em modo de teste
+if (process.env.NODE_ENV !== 'test') {
+    app.listen(PORT, () => {
+        console.log(`🚀 Servidor rodando na porta ${PORT}`);
+        console.log(`📊 Ambiente: ${process.env.NODE_ENV || 'development'}`);
+        console.log(`🌐 URL: ${process.env.RAILWAY_PUBLIC_DOMAIN || 'localhost'}`);
+    });
+}

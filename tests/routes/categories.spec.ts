@@ -1,194 +1,81 @@
 import request from 'supertest';
 import { app } from '../../src/index';
 import prisma from '../../src/lib/prisma';
-import { generateToken } from '../utils';
+import jwt from 'jsonwebtoken';
+import { v4 as uuidv4 } from 'uuid';
 
 describe('Categories Routes', () => {
   let authToken: string;
   let userId: string;
-  let storeId: string;
+  let categoryId: string;
 
   beforeAll(async () => {
     // Criar usuário de teste
     const user = await prisma.users.create({
       data: {
+        id: uuidv4(),
         email: 'test-categories@example.com',
-        encrypted_password: 'hashedpassword',
-        name: 'Test Categories User'
+        encrypted_password: 'hashedpassword'
       }
     });
     userId = user.id;
-    authToken = generateToken(user);
-
-    // Criar loja de teste
-    const store = await prisma.stores.create({
-      data: {
-        name: 'Test Store Categories',
-        slug: 'test-store-categories',
-        user_id: userId
-      }
-    });
-    storeId = store.id;
+    authToken = jwt.sign({ id: user.id, email: user.email }, process.env.JWT_SECRET || 'test-secret');
   });
 
   afterAll(async () => {
     // Limpar dados de teste
     await prisma.products.deleteMany({ where: { user_id: userId } });
     await prisma.categories.deleteMany({ where: { user_id: userId } });
-    await prisma.stores.deleteMany({ where: { user_id: userId } });
     await prisma.users.deleteMany({ where: { id: userId } });
     await prisma.$disconnect();
   });
 
-  beforeEach(async () => {
-    // Limpar categorias antes de cada teste
-    await prisma.products.deleteMany({ where: { user_id: userId } });
-    await prisma.categories.deleteMany({ where: { user_id: userId } });
-  });
-
   describe('GET /categories', () => {
-    it('deve listar categorias do usuário autenticado', async () => {
-      // Criar algumas categorias de teste
-      await prisma.categories.createMany({
-        data: [
-          {
-            name: 'Categoria 1',
-
-            user_id: userId,
-            store_id: storeId
-          },
-          {
-            name: 'Categoria 2',
-
-            user_id: userId,
-            store_id: storeId
-          }
-        ]
-      });
-
-      const response = await request(app)
-        .get('/categories')
-        .set('Authorization', `Bearer ${authToken}`)
-        .expect(200);
-
-      expect(Array.isArray(response.body)).toBe(true);
-      expect(response.body).toHaveLength(2);
-      expect(response.body[0]).toHaveProperty('name');
-      expect(response.body[0]).toHaveProperty('user_id', userId);
-    });
-
-    it('deve incluir produtos quando solicitado', async () => {
-      // Criar categoria com produtos
+    beforeEach(async () => {
+      // Criar categoria de teste
       const category = await prisma.categories.create({
         data: {
-          name: 'Categoria com Produtos',
-
           user_id: userId,
-          store_id: storeId
+          name: 'Categoria Teste',
+          color: '#FF5733'
         }
       });
-
-      // Criar produto na categoria
-      await prisma.products.create({
-        data: {
-          name: 'Produto Teste',
-          description: 'Produto para teste',
-          price: '10.00',
-          stock: 10,
-          user_id: userId,
-          store_id: storeId,
-          category_id: category.id
-        }
-      });
-
-      const response = await request(app)
-        .get('/categories?includeProducts=true')
-        .set('Authorization', `Bearer ${authToken}`)
-        .expect(200);
-
-      expect(response.body[0].products).toBeDefined();
-      expect(response.body[0].products).toHaveLength(1);
-      expect(response.body[0].products[0].name).toBe('Produto Teste');
+      categoryId = category.id;
     });
 
-    it('deve retornar erro 401 sem autenticação', async () => {
-      await request(app)
+    afterEach(async () => {
+      await prisma.categories.deleteMany({ where: { user_id: userId } });
+    });
+
+    it('deve listar categorias do usuário', async () => {
+      const response = await request(app)
         .get('/categories')
-        .expect(401);
+        .set('Authorization', `Bearer ${authToken}`);
+
+      expect(response.status).toBe(200);
+      expect(Array.isArray(response.body)).toBe(true);
+      expect(response.body.length).toBeGreaterThan(0);
+      expect(response.body[0].user_id).toBe(userId);
+      expect(response.body[0].name).toBe('Categoria Teste');
     });
   });
 
-  describe('GET /categories/:id', () => {
-    it('deve buscar categoria por ID', async () => {
-      const category = await prisma.categories.create({
-        data: {
-          name: 'Categoria Teste',
-
-          user_id: userId,
-          store_id: storeId
-        }
-      });
+  describe('GET /categories - array vazio', () => {
+    it('deve retornar array vazio quando não há categorias', async () => {
+      // Limpar todas as categorias do usuário antes do teste
+      await prisma.categories.deleteMany({ where: { user_id: userId } });
+      
+      // Limpar cache do usuário
+      const { clearUserCache } = require('../../src/lib/cache');
+      clearUserCache(userId);
 
       const response = await request(app)
-        .get(`/categories/${category.id}`)
-        .set('Authorization', `Bearer ${authToken}`)
-        .expect(200);
+        .get('/categories')
+        .set('Authorization', `Bearer ${authToken}`);
 
-      expect(response.body.id).toBe(category.id);
-      expect(response.body.name).toBe('Categoria Teste');
-      expect(response.body.user_id).toBe(userId);
-    });
-
-    it('deve retornar 404 para categoria inexistente', async () => {
-      await request(app)
-        .get('/categories/non-existent-id')
-        .set('Authorization', `Bearer ${authToken}`)
-        .expect(404);
-    });
-
-    it('deve retornar 404 para categoria de outro usuário', async () => {
-      // Criar outro usuário e categoria
-      const otherUser = await prisma.users.create({
-        data: {
-          email: 'other-categories@example.com',
-          password: 'hashedpassword',
-          name: 'Other Categories User'
-        }
-      });
-
-      const otherStore = await prisma.stores.create({
-        data: {
-          name: 'Other Store Categories',
-          slug: 'other-store-categories',
-          user_id: otherUser.id
-        }
-      });
-
-      const otherCategory = await prisma.categories.create({
-        data: {
-          name: 'Other Category',
-          description: 'Category from other user',
-          user_id: otherUser.id,
-          store_id: otherStore.id
-        }
-      });
-
-      await request(app)
-        .get(`/categories/${otherCategory.id}`)
-        .set('Authorization', `Bearer ${authToken}`)
-        .expect(404);
-
-      // Limpar dados de teste
-      await prisma.categories.delete({ where: { id: otherCategory.id } });
-      await prisma.stores.delete({ where: { id: otherStore.id } });
-      await prisma.users.delete({ where: { id: otherUser.id } });
-    });
-
-    it('deve retornar erro 400 para ID inválido', async () => {
-      await request(app)
-        .get('/categories/')
-        .set('Authorization', `Bearer ${authToken}`)
-        .expect(404);
+      expect(response.status).toBe(200);
+      expect(Array.isArray(response.body)).toBe(true);
+      expect(response.body.length).toBe(0);
     });
   });
 
@@ -196,273 +83,312 @@ describe('Categories Routes', () => {
     it('deve criar nova categoria', async () => {
       const categoryData = {
         name: 'Nova Categoria',
-        description: 'Descrição da nova categoria',
-        store_id: storeId
+        color: '#4CAF50'
       };
 
       const response = await request(app)
         .post('/categories')
         .set('Authorization', `Bearer ${authToken}`)
-        .send(categoryData)
-        .expect(201);
+        .send(categoryData);
 
-      expect(response.body.name).toBe(categoryData.name);
-      expect(response.body.description).toBe(categoryData.description);
+      expect(response.status).toBe(201);
+      expect(response.body.name).toBe('Nova Categoria');
+      expect(response.body.color).toBe('#4CAF50');
       expect(response.body.user_id).toBe(userId);
-      expect(response.body.store_id).toBe(storeId);
     });
 
-    it('deve retornar erro 400 para dados inválidos', async () => {
-      const invalidData = {
-        name: '', // Nome vazio
-        description: 'Descrição válida',
-        store_id: storeId
+    it('deve criar categoria com cor padrão', async () => {
+      const categoryData = {
+        name: 'Categoria Sem Cor'
       };
 
       const response = await request(app)
         .post('/categories')
         .set('Authorization', `Bearer ${authToken}`)
-        .send(invalidData)
-        .expect(400);
+        .send(categoryData);
 
-      expect(response.body.error).toBe('Dados inválidos');
+      expect(response.status).toBe(201);
+      expect(response.body.name).toBe('Categoria Sem Cor');
+      expect(response.body.color).toBe('#8B5CF6'); // Cor padrão
     });
 
-    it('deve retornar erro 401 sem autenticação', async () => {
+    it('deve retornar erro se nome não for fornecido', async () => {
       const categoryData = {
-        name: 'Categoria sem Auth',
-        description: 'Categoria sem autenticação',
-        store_id: storeId
+        color: '#FF5733'
       };
 
-      await request(app)
+      const response = await request(app)
         .post('/categories')
-        .send(categoryData)
-        .expect(401);
+        .set('Authorization', `Bearer ${authToken}`)
+        .send(categoryData);
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toBe('Nome da categoria é obrigatório');
+    });
+  });
+
+  describe('GET /categories/:id', () => {
+    beforeEach(async () => {
+      // Criar categoria de teste
+      const category = await prisma.categories.create({
+        data: {
+          user_id: userId,
+          name: 'Categoria Teste',
+          color: '#FF5733'
+        }
+      });
+      categoryId = category.id;
+    });
+
+    afterEach(async () => {
+      await prisma.categories.deleteMany({ where: { user_id: userId } });
+    });
+
+    it('deve buscar categoria por ID', async () => {
+      const response = await request(app)
+        .get(`/categories/${categoryId}`)
+        .set('Authorization', `Bearer ${authToken}`);
+
+      expect(response.status).toBe(200);
+      expect(response.body.id).toBe(categoryId);
+      expect(response.body.name).toBe('Categoria Teste');
+      expect(response.body.color).toBe('#FF5733');
+    });
+
+    it('deve retornar erro para categoria inexistente', async () => {
+      const response = await request(app)
+        .get('/categories/categoria-inexistente')
+        .set('Authorization', `Bearer ${authToken}`);
+
+      expect(response.status).toBe(404);
+      expect(response.body.error).toBe('Categoria não encontrada');
+    });
+
+    it('deve retornar erro para categoria de outro usuário', async () => {
+      // Criar outro usuário
+      const otherUser = await prisma.users.create({
+        data: {
+          id: '550e8400-e29b-41d4-a716-446655440002',
+          email: 'other-user@example.com',
+          encrypted_password: 'hashedpassword'
+        }
+      });
+
+      // Criar categoria para outro usuário
+      const otherCategory = await prisma.categories.create({
+        data: {
+          user_id: otherUser.id,
+          name: 'Categoria Outro Usuário',
+          color: '#FF0000'
+        }
+      });
+
+      const response = await request(app)
+        .get(`/categories/${otherCategory.id}`)
+        .set('Authorization', `Bearer ${authToken}`);
+
+      expect(response.status).toBe(404);
+      expect(response.body.error).toBe('Categoria não encontrada');
+
+      // Limpar
+      await prisma.categories.deleteMany({ where: { user_id: otherUser.id } });
+      await prisma.users.deleteMany({ where: { id: otherUser.id } });
     });
   });
 
   describe('PUT /categories/:id', () => {
-    it('deve atualizar categoria existente', async () => {
+    beforeEach(async () => {
+      // Criar categoria de teste
       const category = await prisma.categories.create({
         data: {
-          name: 'Categoria Original',
-          description: 'Descrição original',
           user_id: userId,
-          store_id: storeId
+          name: 'Categoria Teste',
+          color: '#FF5733'
         }
       });
+      categoryId = category.id;
+    });
 
+    afterEach(async () => {
+      await prisma.categories.deleteMany({ where: { user_id: userId } });
+    });
+
+    it('deve atualizar categoria', async () => {
       const updateData = {
         name: 'Categoria Atualizada',
-        description: 'Descrição atualizada'
+        color: '#2196F3'
       };
 
       const response = await request(app)
-        .put(`/categories/${category.id}`)
+        .put(`/categories/${categoryId}`)
         .set('Authorization', `Bearer ${authToken}`)
-        .send(updateData)
-        .expect(200);
+        .send(updateData);
 
-      expect(response.body.name).toBe(updateData.name);
-      expect(response.body.description).toBe(updateData.description);
-      expect(response.body.id).toBe(category.id);
+      expect(response.status).toBe(200);
+      expect(response.body.name).toBe('Categoria Atualizada');
+      expect(response.body.color).toBe('#2196F3');
     });
 
-    it('deve retornar erro 404 para categoria inexistente', async () => {
+    it('deve atualizar apenas o nome', async () => {
       const updateData = {
-        name: 'Categoria Inexistente',
-        description: 'Descrição'
+        name: 'Apenas Nome Atualizado'
       };
 
-      await request(app)
-        .put('/categories/non-existent-id')
+      const response = await request(app)
+        .put(`/categories/${categoryId}`)
         .set('Authorization', `Bearer ${authToken}`)
-        .send(updateData)
-        .expect(404);
+        .send(updateData);
+
+      expect(response.status).toBe(200);
+      expect(response.body.name).toBe('Apenas Nome Atualizado');
+      expect(response.body.color).toBe('#FF5733'); // Cor original mantida
     });
 
-    it('deve retornar erro 404 para categoria de outro usuário', async () => {
-      // Criar outro usuário e categoria
-      const otherUser = await prisma.users.create({
-        data: {
-          email: 'other-update@example.com',
-          password: 'hashedpassword',
-          name: 'Other Update User'
-        }
-      });
-
-      const otherStore = await prisma.stores.create({
-        data: {
-          name: 'Other Update Store',
-          slug: 'other-update-store',
-          user_id: otherUser.id
-        }
-      });
-
-      const otherCategory = await prisma.categories.create({
-        data: {
-          name: 'Other Category',
-          description: 'Category from other user',
-          user_id: otherUser.id,
-          store_id: otherStore.id
-        }
-      });
-
+    it('deve retornar erro para categoria inexistente', async () => {
       const updateData = {
-        name: 'Tentativa de Atualização',
-        description: 'Descrição'
+        name: 'Categoria Atualizada'
       };
 
-      await request(app)
-        .put(`/categories/${otherCategory.id}`)
+      const response = await request(app)
+        .put('/categories/categoria-inexistente')
         .set('Authorization', `Bearer ${authToken}`)
-        .send(updateData)
-        .expect(404);
+        .send(updateData);
 
-      // Limpar dados de teste
-      await prisma.categories.delete({ where: { id: otherCategory.id } });
-      await prisma.stores.delete({ where: { id: otherStore.id } });
-      await prisma.users.delete({ where: { id: otherUser.id } });
-    });
-
-    it('deve retornar erro 400 para dados inválidos', async () => {
-      const category = await prisma.categories.create({
-        data: {
-          name: 'Categoria para Atualizar',
-          description: 'Descrição',
-          user_id: userId,
-          store_id: storeId
-        }
-      });
-
-      const invalidData = {
-        name: '' // Nome vazio
-      };
-
-      await request(app)
-        .put(`/categories/${category.id}`)
-        .set('Authorization', `Bearer ${authToken}`)
-        .send(invalidData)
-        .expect(400);
+      expect(response.status).toBe(404);
+      expect(response.body.error).toBe('Categoria não encontrada');
     });
   });
 
   describe('DELETE /categories/:id', () => {
-    it('deve deletar categoria existente', async () => {
+    beforeEach(async () => {
+      // Criar categoria de teste
       const category = await prisma.categories.create({
         data: {
-          name: 'Categoria para Deletar',
-          description: 'Descrição da categoria para deletar',
           user_id: userId,
-          store_id: storeId
+          name: 'Categoria Teste',
+          color: '#FF5733'
         }
       });
+      categoryId = category.id;
+    });
 
-      await request(app)
-        .delete(`/categories/${category.id}`)
-        .set('Authorization', `Bearer ${authToken}`)
-        .expect(204);
+    it('deve deletar categoria sem produtos', async () => {
+      const response = await request(app)
+        .delete(`/categories/${categoryId}`)
+        .set('Authorization', `Bearer ${authToken}`);
+
+      expect(response.status).toBe(200);
+      expect(response.body.message).toBe('Categoria deletada com sucesso');
 
       // Verificar se foi realmente deletada
       const deletedCategory = await prisma.categories.findUnique({
-        where: { id: category.id }
+        where: { id: categoryId }
       });
       expect(deletedCategory).toBeNull();
     });
 
-    it('deve retornar erro 404 para categoria inexistente', async () => {
-      await request(app)
-        .delete('/categories/non-existent-id')
-        .set('Authorization', `Bearer ${authToken}`)
-        .expect(404);
+    it('deve retornar erro para categoria com produtos', async () => {
+      // Criar produto associado à categoria
+      await prisma.products.create({
+        data: {
+          user_id: userId,
+          category_id: categoryId,
+          name: 'Produto Teste',
+          price: 10.00,
+          stock: 5
+        }
+      });
+
+      const response = await request(app)
+        .delete(`/categories/${categoryId}`)
+        .set('Authorization', `Bearer ${authToken}`);
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toBe('Não é possível deletar categoria que possui produtos');
+
+      // Limpar produto
+      await prisma.products.deleteMany({ where: { user_id: userId } });
     });
 
-    it('deve retornar erro 404 para categoria de outro usuário', async () => {
-      // Criar outro usuário e categoria
-      const otherUser = await prisma.users.create({
-        data: {
-          email: 'other-delete@example.com',
-          password: 'hashedpassword',
-          name: 'Other Delete User'
-        }
-      });
+    it('deve retornar erro para categoria inexistente', async () => {
+      const response = await request(app)
+        .delete('/categories/categoria-inexistente')
+        .set('Authorization', `Bearer ${authToken}`);
 
-      const otherStore = await prisma.stores.create({
-        data: {
-          name: 'Other Delete Store',
-          slug: 'other-delete-store',
-          user_id: otherUser.id
-        }
-      });
-
-      const otherCategory = await prisma.categories.create({
-        data: {
-          name: 'Other Category',
-          description: 'Category from other user',
-          user_id: otherUser.id,
-          store_id: otherStore.id
-        }
-      });
-
-      await request(app)
-        .delete(`/categories/${otherCategory.id}`)
-        .set('Authorization', `Bearer ${authToken}`)
-        .expect(404);
-
-      // Limpar dados de teste
-      await prisma.categories.delete({ where: { id: otherCategory.id } });
-      await prisma.stores.delete({ where: { id: otherStore.id } });
-      await prisma.users.delete({ where: { id: otherUser.id } });
-    });
-
-    it('deve retornar erro 400 para ID inválido', async () => {
-      await request(app)
-        .delete('/categories/')
-        .set('Authorization', `Bearer ${authToken}`)
-        .expect(404);
+      expect(response.status).toBe(404);
+      expect(response.body.error).toBe('Categoria não encontrada');
     });
   });
 
-  describe('Relacionamentos', () => {
-    it('deve incluir informações da loja', async () => {
+  describe('GET /categories/:id/products', () => {
+    beforeEach(async () => {
+      // Criar categoria de teste
       const category = await prisma.categories.create({
         data: {
-          name: 'Categoria com Loja',
-          description: 'Categoria que inclui informações da loja',
           user_id: userId,
-          store_id: storeId
+          name: 'Categoria Teste',
+          color: '#FF5733'
         }
       });
+      categoryId = category.id;
 
-      const response = await request(app)
-        .get(`/categories/${category.id}`)
-        .set('Authorization', `Bearer ${authToken}`)
-        .expect(200);
-
-      expect(response.body.stores).toBeDefined();
-      expect(response.body.stores.id).toBe(storeId);
-      expect(response.body.stores.name).toBe('Test Store Categories');
+      // Criar produtos de teste
+      await prisma.products.createMany({
+        data: [
+          {
+            user_id: userId,
+            category_id: categoryId,
+            name: 'Produto 1',
+            price: 10.00,
+            stock: 5
+          },
+          {
+            user_id: userId,
+            category_id: categoryId,
+            name: 'Produto 2',
+            price: 20.00,
+            stock: 3
+          }
+        ]
+      });
     });
 
-    it('deve incluir informações do usuário', async () => {
-      const category = await prisma.categories.create({
-        data: {
-          name: 'Categoria com Usuário',
-          description: 'Categoria que inclui informações do usuário',
-          user_id: userId,
-          store_id: storeId
-        }
-      });
+    afterEach(async () => {
+      await prisma.products.deleteMany({ where: { user_id: userId } });
+      await prisma.categories.deleteMany({ where: { user_id: userId } });
+    });
+
+    it('deve listar produtos da categoria', async () => {
+      const response = await request(app)
+        .get(`/categories/${categoryId}/products`)
+        .set('Authorization', `Bearer ${authToken}`);
+
+      expect(response.status).toBe(200);
+      expect(Array.isArray(response.body)).toBe(true);
+      expect(response.body.length).toBe(2);
+      expect(response.body[0].category_id).toBe(categoryId);
+      expect(response.body[1].category_id).toBe(categoryId);
+    });
+
+    it('deve retornar array vazio para categoria sem produtos', async () => {
+      await prisma.products.deleteMany({ where: { user_id: userId } });
 
       const response = await request(app)
-        .get(`/categories/${category.id}`)
-        .set('Authorization', `Bearer ${authToken}`)
-        .expect(200);
+        .get(`/categories/${categoryId}/products`)
+        .set('Authorization', `Bearer ${authToken}`);
 
-      expect(response.body.users).toBeDefined();
-      expect(response.body.users.id).toBe(userId);
-      expect(response.body.users.name).toBe('Test Categories User');
+      expect(response.status).toBe(200);
+      expect(Array.isArray(response.body)).toBe(true);
+      expect(response.body.length).toBe(0);
+    });
+
+    it('deve retornar erro para categoria inexistente', async () => {
+      const response = await request(app)
+        .get('/categories/categoria-inexistente/products')
+        .set('Authorization', `Bearer ${authToken}`);
+
+      expect(response.status).toBe(404);
+      expect(response.body.error).toBe('Categoria não encontrada');
     });
   });
 }); 

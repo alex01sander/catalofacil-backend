@@ -21,6 +21,11 @@ router.get('/customer/:customerId', authenticateJWT, userRateLimit, async (req, 
   }
   
   try {
+    // Validar se o customerId é um UUID válido
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(parse.data.customerId)) {
+      return res.status(404).json({ error: 'Cliente não encontrado' });
+    }
+    
     // Buscar cliente
     const cliente = await prisma.customers.findFirst({
       where: {
@@ -42,22 +47,24 @@ router.get('/customer/:customerId', authenticateJWT, userRateLimit, async (req, 
     }
     
     res.json({
-      customer: {
-        id: cliente.id,
-        name: cliente.name,
-        phone: cliente.phone,
-        email: cliente.email,
-        address: cliente.address,
-        created_at: cliente.created_at
-      },
-      hasCreditAccount: !!crediarioExistente,
-      existingCreditAccount: crediarioExistente ? {
-        id: crediarioExistente.id,
-        customer_name: crediarioExistente.customer_name,
-        customer_phone: crediarioExistente.customer_phone,
-        total_debt: parseFloat(crediarioExistente.total_debt.toString()),
-        status: crediarioExistente.status
-      } : null
+      success: true,
+      data: {
+        customer: {
+          id: cliente.id,
+          name: cliente.name,
+          phone: cliente.phone,
+          email: cliente.email,
+          address: cliente.address,
+          created_at: cliente.created_at
+        },
+        creditAccount: crediarioExistente ? {
+          id: crediarioExistente.id,
+          customer_name: crediarioExistente.customer_name,
+          customer_phone: crediarioExistente.customer_phone,
+          total_debt: parseFloat(crediarioExistente.total_debt.toString()),
+          status: crediarioExistente.status
+        } : null
+      }
     });
   } catch (error) {
     console.error('Erro ao buscar cliente para crediário:', error);
@@ -82,7 +89,7 @@ router.get('/',
     
     try {
       // Construir filtros
-      const where: any = { };
+      const where: any = { user_id: req.user.id };
       
       // Filtro por busca
       if (req.query.search) {
@@ -108,15 +115,6 @@ router.get('/',
             credit_transactions: {
               orderBy: { created_at: 'desc' },
               take: 5 // Últimas 5 transações
-            },
-            customers: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-                address: true,
-                created_at: true
-              }
             }
           },
           ...paginationQuery
@@ -131,7 +129,11 @@ router.get('/',
       }));
       
       const response = createPaginatedResponse(contasComValorNumerico, totalCount, req.pagination!);
-      res.json(response);
+      res.json({
+        success: true,
+        data: response.data,
+        pagination: response.pagination
+      });
     } catch (error) {
       console.error('Erro ao listar contas de crédito:', error);
       res.status(500).json({ error: 'Erro interno do servidor' });
@@ -148,9 +150,15 @@ router.get('/:id', authenticateJWT, async (req, res) => {
   }
   
   try {
+    // Validar se o id é um UUID válido
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(parse.data.id)) {
+      return res.status(404).json({ error: 'Crediário não encontrado' });
+    }
+    
     const conta = await prisma.credit_accounts.findFirst({
       where: { 
-        id: req.params.id
+        id: req.params.id,
+        user_id: req.user.id
       },
       include: {
         credit_transactions: {
@@ -160,7 +168,7 @@ router.get('/:id', authenticateJWT, async (req, res) => {
     });
     
     if (!conta) {
-      return res.status(404).json({ error: 'Conta de crédito não encontrada' });
+      return res.status(404).json({ error: 'Crediário não encontrado' });
     }
     
     // Converter total_debt para número
@@ -169,7 +177,10 @@ router.get('/:id', authenticateJWT, async (req, res) => {
       total_debt: parseFloat(conta.total_debt.toString())
     };
     
-    res.json(contaComValorNumerico);
+    res.json({
+      success: true,
+      data: contaComValorNumerico
+    });
   } catch (error) {
     console.error('Erro ao buscar conta de crédito:', error);
     res.status(500).json({ error: 'Erro interno do servidor' });
@@ -189,76 +200,49 @@ router.post('/', authenticateJWT, userRateLimit, async (req, res) => {
   console.log('📝 [CreditAccounts] User ID:', req.user.id);
   
   try {
-    // Preparar dados para validação
+    // Validar dados de entrada
     const dadosParaValidacao = {
-      ...req.body,
-      user_id: req.user.id
+      customer_name: req.body.customer_name,
+      customer_phone: req.body.customer_phone,
+      customer_address: req.body.customer_address
     };
     
     console.log('📝 [CreditAccounts] Dados para validação:', JSON.stringify(dadosParaValidacao, null, 2));
     
-    // Validar dados com Zod
     const parse = credit_accountsCreateInputSchema.safeParse(dadosParaValidacao);
-    
     if (!parse.success) {
       console.error('❌ [CreditAccounts] Erro de validação:', parse.error.issues);
       console.error('❌ [CreditAccounts] Erro detalhado:', JSON.stringify(parse.error, null, 2));
       return res.status(400).json({ 
         error: 'Dados inválidos', 
-        details: parse.error.issues,
-        receivedData: req.body,
-        validationErrors: parse.error.issues
+        details: parse.error.issues 
       });
     }
     
     console.log('✅ [CreditAccounts] Dados validados:', JSON.stringify(parse.data, null, 2));
     
-    // Verificar se o cliente existe e pertence ao usuário
-    const cliente = await prisma.customers.findFirst({
-      where: {
-        id: parse.data.customer_id,
-        store_owner_id: req.user.id
+    // Verificar se já existe um crediário com o mesmo telefone
+    const crediarioExistente = await prisma.credit_accounts.findFirst({
+      where: { 
+        customer_phone: parse.data.customer_phone,
+        user_id: req.user.id
       }
     });
     
-    if (!cliente) {
-      console.log('❌ [CreditAccounts] Cliente não encontrado ou não pertence ao usuário');
-      return res.status(404).json({ 
-        error: 'Cliente não encontrado ou não pertence ao seu cadastro',
-        customer_id: parse.data.customer_id
+    if (crediarioExistente) {
+      console.log('❌ [CreditAccounts] Cliente já tem crediário:', crediarioExistente.id);
+      return res.status(400).json({ 
+        error: 'Cliente já possui crediário ativo',
+        existingAccountId: crediarioExistente.id
       });
     }
     
-    // Verificar se o cliente já tem crediário
-    if (cliente.phone) {
-      const crediarioExistente = await prisma.credit_accounts.findFirst({
-        where: {
-          customer_phone: cliente.phone
-        }
-      });
-      
-      if (crediarioExistente) {
-        console.log('❌ [CreditAccounts] Cliente já tem crediário:', crediarioExistente.id);
-        return res.status(400).json({ 
-          error: 'Cliente já possui conta de crédito', 
-          existingCreditAccount: {
-            id: crediarioExistente.id,
-            customer_name: crediarioExistente.customer_name,
-            customer_phone: crediarioExistente.customer_phone,
-            total_debt: parseFloat(crediarioExistente.total_debt.toString())
-          }
-        });
-      }
-    }
-    
-    // Preparar dados para criação com informações do cliente
+    // Dados para criação
     const dadosParaCriar = {
-      ...parse.data,
-      user_id: req.user.id, // Garantir que user_id seja sempre string
-      customer_id: cliente.id,
-      customer_name: cliente.name,
-      customer_phone: cliente.phone || '',
-      customer_address: cliente.address || parse.data.customer_address || ''
+      user_id: req.user.id,
+      customer_name: parse.data.customer_name!,
+      customer_phone: parse.data.customer_phone!,
+      customer_address: parse.data.customer_address || ''
     };
     
     console.log('📝 [CreditAccounts] Dados para criação:', JSON.stringify(dadosParaCriar, null, 2));
@@ -272,8 +256,11 @@ router.post('/', authenticateJWT, userRateLimit, async (req, res) => {
     console.log('📝 [CreditAccounts] === FIM DA REQUISIÇÃO ===');
     
     res.status(201).json({
-      ...novaConta,
-      total_debt: parseFloat(novaConta.total_debt.toString())
+      success: true,
+      data: {
+        ...novaConta,
+        total_debt: parseFloat(novaConta.total_debt.toString())
+      }
     });
   } catch (error) {
     console.error('❌ [CreditAccounts] Erro ao criar conta:', error);
@@ -303,15 +290,21 @@ router.put('/:id', authenticateJWT, userRateLimit, async (req, res) => {
   }
   
   try {
+    // Validar se o id é um UUID válido
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(parse.data.id)) {
+      return res.status(404).json({ error: 'Crediário não encontrado' });
+    }
+    
     // Verificar se a conta existe
     const contaExistente = await prisma.credit_accounts.findFirst({
       where: { 
-        id: req.params.id
+        id: req.params.id,
+        user_id: req.user.id
       }
     });
     
     if (!contaExistente) {
-      return res.status(404).json({ error: 'Conta de crédito não encontrada' });
+      return res.status(404).json({ error: 'Crediário não encontrado' });
     }
     
     const contaAtualizada = await prisma.credit_accounts.update({
@@ -323,8 +316,11 @@ router.put('/:id', authenticateJWT, userRateLimit, async (req, res) => {
     clearUserCache(req.user.id);
     
     res.json({
-      ...contaAtualizada,
-      total_debt: parseFloat(contaAtualizada.total_debt.toString())
+      success: true,
+      data: {
+        ...contaAtualizada,
+        total_debt: parseFloat(contaAtualizada.total_debt.toString())
+      }
     });
   } catch (error) {
     console.error('Erro ao atualizar conta de crédito:', error);
@@ -342,38 +338,128 @@ router.delete('/:id', authenticateJWT, userRateLimit, async (req, res) => {
   }
   
   try {
+    // Validar se o id é um UUID válido
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(parse.data.id)) {
+      return res.status(404).json({ error: 'Crediário não encontrado' });
+    }
+    
     // Verificar se a conta pertence ao usuário
     const contaExistente = await prisma.credit_accounts.findFirst({
       where: { 
-        id: req.params.id
+        id: req.params.id,
+        user_id: req.user.id
       }
     });
     
     if (!contaExistente) {
-      return res.status(404).json({ error: 'Conta de crédito não encontrada' });
+      return res.status(404).json({ error: 'Crediário não encontrado' });
     }
     
     // Verificar se há dívidas pendentes
     if (parseFloat(contaExistente.total_debt.toString()) > 0) {
       return res.status(400).json({ 
-        error: 'Não é possível deletar cliente com dívidas pendentes',
+        error: 'Não é possível excluir crediário com dívidas pendentes',
         total_debt: parseFloat(contaExistente.total_debt.toString())
       });
     }
     
-    await prisma.credit_accounts.delete({ where: { id: req.params.id } });
+    await prisma.credit_accounts.delete({
+      where: { id: req.params.id }
+    });
     
     // Limpar cache do usuário
     clearUserCache(req.user.id);
     
-    res.status(204).send();
+    res.json({
+      success: true,
+      message: 'Crediário excluído com sucesso'
+    });
   } catch (error) {
     console.error('Erro ao deletar conta de crédito:', error);
     res.status(500).json({ error: 'Erro interno do servidor' });
   }
 });
 
-// Buscar transações de um cliente específico
+// Adicionar transação ao crediário
+router.post('/:id/transactions', authenticateJWT, userRateLimit, async (req, res) => {
+  if (!req.user) return res.status(401).json({ error: 'Usuário não autenticado' });
+  
+  const parse = idParamSchema.safeParse(req.params);
+  if (!parse.success) {
+    return res.status(400).json({ error: 'Parâmetro inválido', details: parse.error.issues });
+  }
+  
+  try {
+    // Validar se o id é um UUID válido
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(parse.data.id)) {
+      return res.status(404).json({ error: 'Crediário não encontrado' });
+    }
+    
+    // Verificar se o crediário existe
+    const crediario = await prisma.credit_accounts.findFirst({
+      where: { 
+        id: req.params.id,
+        user_id: req.user.id
+      }
+    });
+    
+    if (!crediario) {
+      return res.status(404).json({ error: 'Crediário não encontrado' });
+    }
+    
+    // Validar dados da transação
+    const { type, amount, description } = req.body;
+    
+    if (!type || !amount || !description) {
+      return res.status(400).json({ error: 'Tipo, valor e descrição são obrigatórios' });
+    }
+    
+    if (!['debito', 'pagamento'].includes(type)) {
+      return res.status(400).json({ error: 'Tipo deve ser "debito" ou "pagamento"' });
+    }
+    
+    if (typeof amount !== 'number' || amount <= 0) {
+      return res.status(400).json({ error: 'Valor deve ser um número positivo' });
+    }
+    
+    // Criar transação
+    const transacao = await prisma.credit_transactions.create({
+      data: {
+        credit_account_id: req.params.id,
+        user_id: req.user.id,
+        type,
+        amount,
+        description
+      }
+    });
+    
+    // Atualizar total_debt do crediário
+    const novoTotal = type === 'debito' 
+      ? parseFloat(crediario.total_debt.toString()) + amount
+      : parseFloat(crediario.total_debt.toString()) - amount;
+    
+    await prisma.credit_accounts.update({
+      where: { id: req.params.id },
+      data: { total_debt: novoTotal }
+    });
+    
+    // Limpar cache do usuário
+    clearUserCache(req.user.id);
+    
+    res.status(201).json({
+      success: true,
+      data: {
+        ...transacao,
+        amount: parseFloat(transacao.amount.toString())
+      }
+    });
+  } catch (error) {
+    console.error('Erro ao adicionar transação:', error);
+    res.status(500).json({ error: 'Erro interno do servidor' });
+  }
+});
+
+// Listar transações do crediário
 router.get('/:id/transactions', authenticateJWT, userRateLimit, async (req, res) => {
   if (!req.user) return res.status(401).json({ error: 'Usuário não autenticado' });
   
@@ -383,34 +469,41 @@ router.get('/:id/transactions', authenticateJWT, userRateLimit, async (req, res)
   }
   
   try {
-    // Verificar se a conta pertence ao usuário
-    const conta = await prisma.credit_accounts.findFirst({
+    // Validar se o id é um UUID válido
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(parse.data.id)) {
+      return res.status(404).json({ error: 'Crediário não encontrado' });
+    }
+    
+    // Verificar se o crediário existe
+    const crediario = await prisma.credit_accounts.findFirst({
       where: { 
-        id: req.params.id
+        id: req.params.id,
+        user_id: req.user.id
       }
     });
     
-    if (!conta) {
-      return res.status(404).json({ error: 'Conta de crédito não encontrada' });
+    if (!crediario) {
+      return res.status(404).json({ error: 'Crediário não encontrado' });
     }
     
-    // Buscar transações da conta
+    // Buscar transações
     const transacoes = await prisma.credit_transactions.findMany({
-      where: { 
-        credit_account_id: req.params.id
-      },
+      where: { credit_account_id: req.params.id },
       orderBy: { created_at: 'desc' }
     });
     
-    // Converter amounts para números
+    // Converter amount para número
     const transacoesComValorNumerico = transacoes.map(transacao => ({
       ...transacao,
       amount: parseFloat(transacao.amount.toString())
     }));
     
-    res.json(transacoesComValorNumerico);
+    res.json({
+      success: true,
+      data: transacoesComValorNumerico
+    });
   } catch (error) {
-    console.error('Erro ao buscar transações do cliente:', error);
+    console.error('Erro ao listar transações:', error);
     res.status(500).json({ error: 'Erro interno do servidor' });
   }
 });

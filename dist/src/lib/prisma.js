@@ -5,9 +5,7 @@ const client_1 = require("@prisma/client");
 const prisma = new client_1.PrismaClient({
     datasources: {
         db: {
-            url: process.env.NODE_ENV === 'test'
-                ? 'file:./test.db'
-                : process.env.DATABASE_URL
+            url: process.env.DATABASE_URL || 'postgresql://catalofacil:4WdNU3pa3vCOzshZO9dKmAgNyj4gYLte@dpg-d1srh66mcj7s73arkbtg-a.virginia-postgres.render.com/catalofacil_postgres?connection_limit=2'
         }
     },
     log: process.env.NODE_ENV === 'development' ? ['query', 'info', 'warn', 'error'] : ['error']

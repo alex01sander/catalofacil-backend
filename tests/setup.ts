@@ -1,12 +1,12 @@
-import dotenv from 'dotenv';
-
-// Carregar variáveis de ambiente para testes
-dotenv.config({ path: '.env.test' });
+import { testConfig } from './config';
 
 // Configurações globais para testes
-process.env.NODE_ENV = 'test';
-process.env.JWT_SECRET = 'test-secret-key';
-process.env.DATABASE_URL = process.env.TEST_DATABASE_URL || 'postgresql://test:test@localhost:5432/test_db';
+process.env.NODE_ENV = testConfig.NODE_ENV;
+process.env.JWT_SECRET = testConfig.JWT_SECRET;
+process.env.PORT = testConfig.PORT;
+
+// Definir DATABASE_URL diretamente para evitar problemas com quebra de linha
+process.env.DATABASE_URL = testConfig.DATABASE_URL;
 
 // Mock do console para reduzir ruído nos testes
 const originalConsoleLog = console.log;

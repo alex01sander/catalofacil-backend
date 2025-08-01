@@ -4,292 +4,237 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const supertest_1 = __importDefault(require("supertest"));
-const express_1 = __importDefault(require("express"));
-const utils_spec_1 = require("../utils.spec");
-// Mock do Prisma
-const mockPrisma = {
-    credit_accounts: {
-        findMany: jest.fn(),
-        findUnique: jest.fn(),
-        create: jest.fn(),
-        update: jest.fn(),
-        delete: jest.fn(),
-        count: jest.fn()
-    },
-    credit_transactions: {
-        findMany: jest.fn()
-    }
-};
-jest.mock('../../src/lib/prisma', () => ({
-    __esModule: true,
-    default: mockPrisma
-}));
-// Mock dos middlewares
-jest.mock('../../src/middleware/auth', () => ({
-    __esModule: true,
-    default: (req, res, next) => {
-        req.user = { id: '123e4567-e89b-12d3-a456-426614174000', email: 'test@example.com' };
-        next();
-    }
-}));
-jest.mock('../../src/middleware/rateLimiter', () => ({
-    userRateLimit: (req, res, next) => next()
-}));
-jest.mock('../../src/middleware/pagination', () => ({
-    paginationMiddleware: (req, res, next) => next(),
-    paginationHeaders: (req, res, next) => next(),
-    createPaginatedResponse: jest.fn((data, total, pagination) => ({
-        data,
-        pagination: {
-            currentPage: pagination.page,
-            totalPages: Math.ceil(total / pagination.limit),
-            totalItems: total,
-            itemsPerPage: pagination.limit,
-            hasNextPage: pagination.page < Math.ceil(total / pagination.limit),
-            hasPrevPage: pagination.page > 1
-        }
-    }))
-}));
-// Mock do cache
-jest.mock('../../src/lib/cache', () => ({
-    __esModule: true,
-    default: {
-        get: jest.fn(),
-        set: jest.fn(),
-        del: jest.fn()
-    },
-    cacheMiddleware: jest.fn(() => (req, res, next) => next()),
-    generateCacheKey: jest.fn(() => 'test-cache-key')
-}));
-// Importar as rotas
-const creditAccounts_1 = __importDefault(require("../../src/routes/creditAccounts"));
-const app = (0, express_1.default)();
-app.use(express_1.default.json());
-app.use('/credit-accounts', creditAccounts_1.default);
+const index_1 = require("../../src/index");
+const prisma_1 = __importDefault(require("../../src/lib/prisma"));
+const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
+const uuid_1 = require("uuid");
 describe('Credit Accounts Routes', () => {
-    beforeEach(() => {
-        jest.clearAllMocks();
+    let authToken;
+    let userId;
+    let customerId;
+    let creditAccountId;
+    beforeAll(async () => {
+        // Criar usuário de teste
+        const user = await prisma_1.default.users.create({
+            data: {
+                id: (0, uuid_1.v4)(),
+                email: 'test-credit@example.com',
+                encrypted_password: 'hashedpassword'
+            }
+        });
+        userId = user.id;
+        authToken = jsonwebtoken_1.default.sign({ id: user.id, email: user.email }, process.env.JWT_SECRET || 'test-secret');
+        // Criar cliente de teste
+        const customer = await prisma_1.default.customers.create({
+            data: {
+                id: (0, uuid_1.v4)(),
+                store_owner_id: userId,
+                name: 'Cliente Teste',
+                email: 'cliente@teste.com',
+                phone: '11999999999'
+            }
+        });
+        customerId = customer.id;
     });
-    describe('GET /credit-accounts', () => {
-        it('should return list of credit accounts', async () => {
-            const mockAccounts = [
-                {
-                    id: '1',
-                    customer_name: 'João Silva',
-                    customer_phone: '51987654321',
-                    total_debt: 150.00,
-                    status: 'active',
-                    created_at: new Date()
-                }
-            ];
-            mockPrisma.credit_accounts.findMany.mockResolvedValue(mockAccounts);
-            mockPrisma.credit_accounts.count.mockResolvedValue(1);
-            const response = await (0, supertest_1.default)(app)
-                .get('/credit-accounts')
-                .set('Authorization', `Bearer ${(0, utils_spec_1.generateTestToken)()}`)
+    afterAll(async () => {
+        // Limpar dados de teste
+        await prisma_1.default.credit_transactions.deleteMany({});
+        await prisma_1.default.credit_accounts.deleteMany({});
+        await prisma_1.default.customers.deleteMany({ where: { store_owner_id: userId } });
+        await prisma_1.default.users.deleteMany({ where: { id: userId } });
+        await prisma_1.default.$disconnect();
+    });
+    describe('GET /creditAccounts/customer/:customerId', () => {
+        it('deve retornar dados do cliente e status do crediário', async () => {
+            const response = await (0, supertest_1.default)(index_1.app)
+                .get(`/creditAccounts/customer/${customerId}`)
+                .set('Authorization', `Bearer ${authToken}`)
                 .expect(200);
             expect(response.body.success).toBe(true);
-            expect(response.body.data).toHaveLength(1);
-            expect(response.body.data[0].customer_name).toBe('João Silva');
+            expect(response.body.data).toHaveProperty('customer');
+            expect(response.body.data).toHaveProperty('creditAccount');
         });
-        it('should handle database errors', async () => {
-            mockPrisma.credit_accounts.findMany.mockRejectedValue(new Error('Database error'));
-            const response = await (0, supertest_1.default)(app)
-                .get('/credit-accounts')
-                .set('Authorization', `Bearer ${(0, utils_spec_1.generateTestToken)()}`)
-                .expect(500);
-            expect(response.body.error).toBe('Erro interno do servidor');
-        });
-    });
-    describe('GET /credit-accounts/:id', () => {
-        it('should return a specific credit account', async () => {
-            const mockAccount = {
-                id: '1',
-                customer_name: 'João Silva',
-                customer_phone: '51987654321',
-                total_debt: 150.00,
-                status: 'active',
-                created_at: new Date()
-            };
-            mockPrisma.credit_accounts.findUnique.mockResolvedValue(mockAccount);
-            const response = await (0, supertest_1.default)(app)
-                .get('/credit-accounts/1')
-                .set('Authorization', `Bearer ${(0, utils_spec_1.generateTestToken)()}`)
-                .expect(200);
-            expect(response.body.success).toBe(true);
-            expect(response.body.data.customer_name).toBe('João Silva');
-        });
-        it('should return 404 for non-existent account', async () => {
-            mockPrisma.credit_accounts.findUnique.mockResolvedValue(null);
-            const response = await (0, supertest_1.default)(app)
-                .get('/credit-accounts/999')
-                .set('Authorization', `Bearer ${(0, utils_spec_1.generateTestToken)()}`)
+        it('deve retornar erro para cliente inexistente', async () => {
+            const response = await (0, supertest_1.default)(index_1.app)
+                .get('/creditAccounts/customer/999')
+                .set('Authorization', `Bearer ${authToken}`)
                 .expect(404);
-            expect(response.body.error).toBe('Conta de crédito não encontrada');
+            expect(response.body.error).toBe('Cliente não encontrado');
         });
     });
-    describe('POST /credit-accounts', () => {
-        it('should create a new credit account', async () => {
-            const newAccountData = {
-                customer_name: 'Maria Silva',
-                customer_phone: '51987654321',
-                customer_address: 'Rua Teste, 123',
-                total_debt: 0,
-                status: 'active'
+    describe('POST /creditAccounts', () => {
+        it('deve criar crediário com dados do cliente', async () => {
+            const creditData = {
+                customer_name: 'Cliente Teste',
+                customer_phone: '11999999999',
+                customer_address: 'Rua Teste, 123'
             };
-            const createdAccount = {
-                id: '2',
-                ...newAccountData,
-                user_id: '123e4567-e89b-12d3-a456-426614174000',
-                created_at: new Date()
-            };
-            mockPrisma.credit_accounts.create.mockResolvedValue(createdAccount);
-            const response = await (0, supertest_1.default)(app)
-                .post('/credit-accounts')
-                .set('Authorization', `Bearer ${(0, utils_spec_1.generateTestToken)()}`)
-                .send(newAccountData)
+            const response = await (0, supertest_1.default)(index_1.app)
+                .post('/creditAccounts')
+                .set('Authorization', `Bearer ${authToken}`)
+                .send(creditData)
                 .expect(201);
             expect(response.body.success).toBe(true);
-            expect(response.body.data.customer_name).toBe('Maria Silva');
-            expect(mockPrisma.credit_accounts.create).toHaveBeenCalledWith({
-                data: {
-                    ...newAccountData,
-                    user_id: '123e4567-e89b-12d3-a456-426614174000'
-                }
-            });
+            expect(response.body.data.customer_name).toBe('Cliente Teste');
+            creditAccountId = response.body.data.id;
         });
-        it('should return 400 for invalid data', async () => {
-            const invalidData = {
-                customer_phone: '51987654321'
-                // customer_name missing
+        it('deve retornar erro para cliente inexistente', async () => {
+            const creditData = {
+                customer_name: '', // Nome vazio para causar erro de validação
+                customer_phone: '11999999998'
             };
-            const response = await (0, supertest_1.default)(app)
-                .post('/credit-accounts')
-                .set('Authorization', `Bearer ${(0, utils_spec_1.generateTestToken)()}`)
-                .send(invalidData)
+            const response = await (0, supertest_1.default)(index_1.app)
+                .post('/creditAccounts')
+                .set('Authorization', `Bearer ${authToken}`)
+                .send(creditData)
                 .expect(400);
             expect(response.body.error).toBe('Dados inválidos');
         });
-        it('should return 409 for duplicate customer', async () => {
-            const accountData = {
-                customer_name: 'João Silva',
-                customer_phone: '51987654321'
-            };
-            mockPrisma.credit_accounts.create.mockRejectedValue({
-                code: 'P2002',
-                message: 'Unique constraint failed'
-            });
-            const response = await (0, supertest_1.default)(app)
-                .post('/credit-accounts')
-                .set('Authorization', `Bearer ${(0, utils_spec_1.generateTestToken)()}`)
-                .send(accountData)
-                .expect(409);
-            expect(response.body.error).toBe('Cliente já existe');
+    });
+    describe('GET /creditAccounts', () => {
+        it('deve listar crediários do usuário', async () => {
+            const response = await (0, supertest_1.default)(index_1.app)
+                .get('/creditAccounts')
+                .set('Authorization', `Bearer ${authToken}`)
+                .expect(200);
+            expect(response.body.success).toBe(true);
+            expect(Array.isArray(response.body.data)).toBe(true);
+        });
+        it('deve filtrar por status', async () => {
+            const response = await (0, supertest_1.default)(index_1.app)
+                .get('/creditAccounts?status=active')
+                .set('Authorization', `Bearer ${authToken}`)
+                .expect(200);
+            expect(response.body.success).toBe(true);
+            expect(Array.isArray(response.body.data)).toBe(true);
         });
     });
-    describe('PUT /credit-accounts/:id', () => {
-        it('should update an existing credit account', async () => {
+    describe('GET /creditAccounts/:id', () => {
+        it('deve buscar crediário por ID', async () => {
+            const response = await (0, supertest_1.default)(index_1.app)
+                .get(`/creditAccounts/${creditAccountId}`)
+                .set('Authorization', `Bearer ${authToken}`)
+                .expect(200);
+            expect(response.body.success).toBe(true);
+            expect(response.body.data.id).toBe(creditAccountId);
+        });
+        it('deve retornar erro para crediário inexistente', async () => {
+            const response = await (0, supertest_1.default)(index_1.app)
+                .get('/creditAccounts/999')
+                .set('Authorization', `Bearer ${authToken}`)
+                .expect(404);
+            expect(response.body.error).toBe('Crediário não encontrado');
+        });
+    });
+    describe('PUT /creditAccounts/:id', () => {
+        it('deve atualizar crediário', async () => {
             const updateData = {
-                customer_name: 'João Silva Atualizado',
-                customer_phone: '51987654321'
+                customer_address: 'Nova Rua, 456'
             };
-            const updatedAccount = {
-                id: '1',
-                ...updateData,
-                total_debt: 150.00,
-                status: 'active',
-                updated_at: new Date()
-            };
-            mockPrisma.credit_accounts.findUnique.mockResolvedValue(updatedAccount);
-            mockPrisma.credit_accounts.update.mockResolvedValue(updatedAccount);
-            const response = await (0, supertest_1.default)(app)
-                .put('/credit-accounts/1')
-                .set('Authorization', `Bearer ${(0, utils_spec_1.generateTestToken)()}`)
+            const response = await (0, supertest_1.default)(index_1.app)
+                .put(`/creditAccounts/${creditAccountId}`)
+                .set('Authorization', `Bearer ${authToken}`)
                 .send(updateData)
                 .expect(200);
             expect(response.body.success).toBe(true);
-            expect(response.body.data.customer_name).toBe('João Silva Atualizado');
+            expect(response.body.data.customer_address).toBe('Nova Rua, 456');
         });
-        it('should return 404 for non-existent account', async () => {
-            mockPrisma.credit_accounts.findUnique.mockResolvedValue(null);
-            const response = await (0, supertest_1.default)(app)
-                .put('/credit-accounts/999')
-                .set('Authorization', `Bearer ${(0, utils_spec_1.generateTestToken)()}`)
-                .send({ customer_name: 'Test' })
+        it('deve retornar erro para crediário inexistente', async () => {
+            const response = await (0, supertest_1.default)(index_1.app)
+                .put('/creditAccounts/999')
+                .set('Authorization', `Bearer ${authToken}`)
+                .send({ customer_address: 'Nova Rua, 456' })
                 .expect(404);
-            expect(response.body.error).toBe('Conta de crédito não encontrada');
+            expect(response.body.error).toBe('Crediário não encontrado');
         });
     });
-    describe('DELETE /credit-accounts/:id', () => {
-        it('should delete a credit account without debt', async () => {
-            const accountToDelete = {
-                id: '1',
-                customer_name: 'João Silva',
-                total_debt: 0
-            };
-            mockPrisma.credit_accounts.findUnique.mockResolvedValue(accountToDelete);
-            mockPrisma.credit_accounts.delete.mockResolvedValue(accountToDelete);
-            const response = await (0, supertest_1.default)(app)
-                .delete('/credit-accounts/1')
-                .set('Authorization', `Bearer ${(0, utils_spec_1.generateTestToken)()}`)
+    describe('DELETE /creditAccounts/:id', () => {
+        it('deve deletar crediário', async () => {
+            const response = await (0, supertest_1.default)(index_1.app)
+                .delete(`/creditAccounts/${creditAccountId}`)
+                .set('Authorization', `Bearer ${authToken}`)
                 .expect(200);
             expect(response.body.success).toBe(true);
-            expect(response.body.message).toBe('Conta de crédito excluída com sucesso');
+            expect(response.body.message).toBe('Crediário excluído com sucesso');
         });
-        it('should return 400 for account with debt', async () => {
-            const accountWithDebt = {
-                id: '1',
-                customer_name: 'João Silva',
-                total_debt: 150.00
-            };
-            mockPrisma.credit_accounts.findUnique.mockResolvedValue(accountWithDebt);
-            const response = await (0, supertest_1.default)(app)
-                .delete('/credit-accounts/1')
-                .set('Authorization', `Bearer ${(0, utils_spec_1.generateTestToken)()}`)
-                .expect(400);
-            expect(response.body.error).toBe('Não é possível excluir uma conta com dívida pendente');
-        });
-        it('should return 404 for non-existent account', async () => {
-            mockPrisma.credit_accounts.findUnique.mockResolvedValue(null);
-            const response = await (0, supertest_1.default)(app)
-                .delete('/credit-accounts/999')
-                .set('Authorization', `Bearer ${(0, utils_spec_1.generateTestToken)()}`)
+        it('deve retornar erro para crediário inexistente', async () => {
+            const response = await (0, supertest_1.default)(index_1.app)
+                .delete('/creditAccounts/999')
+                .set('Authorization', `Bearer ${authToken}`)
                 .expect(404);
-            expect(response.body.error).toBe('Conta de crédito não encontrada');
+            expect(response.body.error).toBe('Crediário não encontrado');
         });
     });
-    describe('GET /credit-accounts/:id/transactions', () => {
-        it('should return transactions for a specific account', async () => {
-            const mockTransactions = [
-                {
-                    id: '1',
-                    type: 'debito',
-                    amount: 150.00,
-                    description: 'Compra a prazo',
-                    date: new Date(),
-                    credit_installments: []
+    describe('POST /creditAccounts/:id/transactions', () => {
+        beforeEach(async () => {
+            // Recriar crediário para testes de transações com telefone único
+            const creditAccount = await prisma_1.default.credit_accounts.create({
+                data: {
+                    id: (0, uuid_1.v4)(),
+                    customer_name: 'Cliente Teste Transações',
+                    customer_phone: `11${Math.floor(Math.random() * 90000000) + 10000000}`, // Telefone único
+                    user_id: userId
                 }
-            ];
-            mockPrisma.credit_accounts.findUnique.mockResolvedValue({
-                id: '1',
-                customer_name: 'João Silva'
             });
-            mockPrisma.credit_transactions.findMany.mockResolvedValue(mockTransactions);
-            const response = await (0, supertest_1.default)(app)
-                .get('/credit-accounts/1/transactions')
-                .set('Authorization', `Bearer ${(0, utils_spec_1.generateTestToken)()}`)
-                .expect(200);
-            expect(Array.isArray(response.body)).toBe(true);
-            expect(response.body).toHaveLength(1);
-            expect(response.body[0].type).toBe('debito');
+            creditAccountId = creditAccount.id;
         });
-        it('should return 404 for non-existent account', async () => {
-            mockPrisma.credit_accounts.findUnique.mockResolvedValue(null);
-            const response = await (0, supertest_1.default)(app)
-                .get('/credit-accounts/999/transactions')
-                .set('Authorization', `Bearer ${(0, utils_spec_1.generateTestToken)()}`)
+        it('deve adicionar débito ao crediário', async () => {
+            const transactionData = {
+                type: 'debito',
+                amount: 100.00,
+                description: 'Compra teste'
+            };
+            const response = await (0, supertest_1.default)(index_1.app)
+                .post(`/creditAccounts/${creditAccountId}/transactions`)
+                .set('Authorization', `Bearer ${authToken}`)
+                .send(transactionData)
+                .expect(201);
+            expect(response.body.success).toBe(true);
+            expect(response.body.data.type).toBe('debito');
+        });
+        it('deve adicionar pagamento ao crediário', async () => {
+            const transactionData = {
+                type: 'pagamento',
+                amount: 50.00,
+                description: 'Pagamento teste'
+            };
+            const response = await (0, supertest_1.default)(index_1.app)
+                .post(`/creditAccounts/${creditAccountId}/transactions`)
+                .set('Authorization', `Bearer ${authToken}`)
+                .send(transactionData)
+                .expect(201);
+            expect(response.body.success).toBe(true);
+            expect(response.body.data.type).toBe('pagamento');
+        });
+        it('deve retornar erro para crediário inexistente', async () => {
+            const transactionData = {
+                type: 'debito',
+                amount: 100.00,
+                description: 'Compra teste'
+            };
+            const response = await (0, supertest_1.default)(index_1.app)
+                .post('/creditAccounts/999/transactions')
+                .set('Authorization', `Bearer ${authToken}`)
+                .send(transactionData)
                 .expect(404);
-            expect(response.body.error).toBe('Conta de crédito não encontrada');
+            expect(response.body.error).toBe('Crediário não encontrado');
+        });
+    });
+    describe('GET /creditAccounts/:id/transactions', () => {
+        it('deve listar transações do crediário', async () => {
+            const response = await (0, supertest_1.default)(index_1.app)
+                .get(`/creditAccounts/${creditAccountId}/transactions`)
+                .set('Authorization', `Bearer ${authToken}`)
+                .expect(200);
+            expect(response.body.success).toBe(true);
+            expect(Array.isArray(response.body.data)).toBe(true);
+        });
+        it('deve retornar erro para crediário inexistente', async () => {
+            const response = await (0, supertest_1.default)(index_1.app)
+                .get('/creditAccounts/999/transactions')
+                .set('Authorization', `Bearer ${authToken}`)
+                .expect(404);
+            expect(response.body.error).toBe('Crediário não encontrado');
         });
     });
 });
