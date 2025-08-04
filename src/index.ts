@@ -182,6 +182,7 @@ app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
 app.use('/auth', authRateLimit, authRouter);
 app.use('/products', productsRouter);
 app.use('/site', siteRouter);
+app.use('/api/site', siteRouter); // Alias para compatibilidade com frontend
 app.use('/domain', domainRouter);
 app.use('/stores', storesRouter);
 app.use('/ssoProviders', ssoProvidersRouter);
@@ -240,6 +241,7 @@ app.use('*', (req: Request, res: Response) => {
       !req.path.startsWith('/sales/') &&
       !req.path.startsWith('/categories/') &&
       !req.path.startsWith('/stores/') &&
+      !req.path.startsWith('/site/') &&
       !req.path.startsWith('/health') &&
       !req.path.startsWith('/cache-stats') &&
       req.path !== '/' &&

@@ -3,8 +3,8 @@ const prisma = new PrismaClient();
 
 async function main() {
   // IDs fixos para exemplo
-  const store_id = '848d038b-e5fe-4e8e-876b-a0fe4a2a052b'; // catalofacil
-  const user_id = 'c5e04c2a-b3a2-4ef1-90de-3dd8433d8d6f'; // admin
+  const store_id = '0b094a7e-24cc-456e-912e-178792c3afde'; // catalofacil
+  const user_id = 'b669b536-7bef-4181-b32b-8970ee6d8f49'; // admin@catalofacil.com.br
 
   // 1. Criar categoria
   const categoria = await prisma.categories.create({

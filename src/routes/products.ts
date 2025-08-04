@@ -7,8 +7,9 @@ import { cacheMiddleware, clearUserCache, generateCacheKey } from '../lib/cache'
 import { productsCreateInputSchema, productsUpdateInputSchema } from '../zod';
 import { z } from 'zod';
 import prisma from '../lib/prisma';
-import multer from 'multer';
 import supabase from '../lib/supabase';
+
+const multer = require('multer');
 
 // Adicionar tipagem para req.file
 import { Request } from 'express';
@@ -27,7 +28,7 @@ const idParamSchema = z.object({ id: z.string().min(1, 'ID obrigatório') });
 
 // Configuração do multer para upload
 const upload = multer({ 
-  storage: multer.memoryStorage(),
+  storage: multer.memoryStorage,
   limits: {
     fileSize: 5 * 1024 * 1024, // 5MB limite
   }
@@ -186,7 +187,10 @@ router.post('/', authenticateJWT, uploadRateLimit, upload.single('image'), async
     // Limpar cache do usuário após criar produto
     clearUserCache(req.user.id);
     
-    res.status(201).json(product);
+    res.status(201).json({
+      success: true,
+      data: product
+    });
   } catch (error) {
     console.error('Erro ao criar produto:', error);
     res.status(500).json({ error: 'Erro interno do servidor', details: error });
@@ -254,8 +258,12 @@ router.get('/',
         prisma.products.count({ where })
       ]);
       
-      const response = createPaginatedResponse(products, totalCount, req.pagination!);
-      res.json(response);
+          const response = createPaginatedResponse(products, totalCount, req.pagination!);
+    res.json({
+      success: true,
+      data: response.data,
+      pagination: response.pagination
+    });
     } catch (error) {
       console.error('Erro ao listar produtos:', error);
       res.status(500).json({ error: 'Erro interno do servidor' });
@@ -291,10 +299,13 @@ router.get('/:id', authenticateJWT, async (req, res) => {
     
     // Verificar se o produto pertence ao usuário
     if (product.user_id !== req.user.id) {
-      return res.status(403).json({ error: 'Produto não pertence ao usuário' });
+      return res.status(403).json({ error: 'Acesso negado' });
     }
     
-    res.json(product);
+    res.json({
+      success: true,
+      data: product
+    });
   } catch (error) {
     console.error('Erro ao buscar produto:', error);
     res.status(500).json({ error: 'Erro interno do servidor' });
@@ -322,7 +333,7 @@ router.put('/:id', authenticateJWT, userRateLimit, async (req, res) => {
     }
     
     if (existingProduct.user_id !== req.user.id) {
-      return res.status(403).json({ error: 'Produto não pertence ao usuário' });
+      return res.status(403).json({ error: 'Acesso negado' });
     }
     
     // Prepara os dados para atualização com mapeamento correto
@@ -371,7 +382,10 @@ router.put('/:id', authenticateJWT, userRateLimit, async (req, res) => {
     // Limpar cache do usuário após atualizar produto
     clearUserCache(req.user.id);
     
-    res.json(product);
+    res.json({
+      success: true,
+      data: product
+    });
   } catch (error) {
     console.error('Erro ao atualizar produto:', error);
     res.status(500).json({ error: 'Erro interno do servidor', details: error });
@@ -399,7 +413,7 @@ router.delete('/:id', authenticateJWT, userRateLimit, async (req, res) => {
     }
     
     if (existingProduct.user_id !== req.user.id) {
-      return res.status(403).json({ error: 'Produto não pertence ao usuário' });
+      return res.status(403).json({ error: 'Acesso negado' });
     }
     
     await prisma.products.delete({
@@ -411,7 +425,10 @@ router.delete('/:id', authenticateJWT, userRateLimit, async (req, res) => {
     // Limpar cache do usuário após deletar produto
     clearUserCache(req.user.id);
     
-    res.status(204).send();
+    res.status(200).json({
+      success: true,
+      message: 'Produto excluído com sucesso'
+    });
   } catch (error) {
     console.error('Erro ao deletar produto:', error);
     res.status(500).json({ error: 'Erro interno do servidor' });

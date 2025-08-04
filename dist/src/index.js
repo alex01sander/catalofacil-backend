@@ -160,6 +160,7 @@ app.use((err, req, res, next) => {
 app.use('/auth', rateLimiter_1.authRateLimit, auth_1.default);
 app.use('/products', products_1.default);
 app.use('/site', site_1.default);
+app.use('/api/site', site_1.default); // Alias para compatibilidade com frontend
 app.use('/domain', domain_1.default);
 app.use('/stores', stores_1.default);
 app.use('/ssoProviders', ssoProviders_1.default);
@@ -216,6 +217,7 @@ app.use('*', (req, res) => {
         !req.path.startsWith('/sales/') &&
         !req.path.startsWith('/categories/') &&
         !req.path.startsWith('/stores/') &&
+        !req.path.startsWith('/site/') &&
         !req.path.startsWith('/health') &&
         !req.path.startsWith('/cache-stats') &&
         req.path !== '/' &&

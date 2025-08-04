@@ -425,7 +425,19 @@ router.post('/', authenticateJWT, async (req, res) => {
         order_items: true
       }
     });
-    res.status(201).json(novo);
+    
+    // Converter valores decimais para números
+    const novoComValoresNumericos = {
+      ...novo,
+      total_amount: Number(novo.total_amount),
+      order_items: novo.order_items.map(item => ({
+        ...item,
+        unit_price: Number(item.unit_price),
+        total_price: Number(item.total_price)
+      }))
+    };
+    
+    res.status(201).json(novoComValoresNumericos);
   } catch (e) {
     console.error('❌ [Orders] Erro ao criar pedido:', e);
     res.status(400).json({ error: 'Erro ao criar pedido', details: e instanceof Error ? e.message : e });
@@ -613,6 +625,12 @@ router.post('/:id/items', authenticateJWT, async (req, res) => {
 
     if (pedido.store_owner_id !== req.user.id) {
       return res.status(403).json({ error: 'Não autorizado a adicionar itens a este pedido' });
+    }
+
+    // Validar formato UUID do product_id
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!req.body.product_id || !uuidRegex.test(req.body.product_id)) {
+      return res.status(400).json({ error: 'ID do produto inválido' });
     }
 
     // Verificar se o produto existe

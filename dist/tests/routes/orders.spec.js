@@ -160,7 +160,7 @@ describe('Orders Routes', () => {
                 customer_phone: '51999999999',
                 items: [
                     {
-                        product_id: 'produto-inexistente',
+                        product_id: '00000000-0000-0000-0000-000000000000',
                         quantity: 2,
                         unit_price: 15.00,
                         total_price: 30.00
@@ -360,7 +360,7 @@ describe('Orders Routes', () => {
         });
         it('deve retornar erro para produto inexistente', async () => {
             const itemData = {
-                product_id: 'produto-inexistente',
+                product_id: '00000000-0000-0000-0000-000000000000',
                 quantity: 1,
                 unit_price: 15.00,
                 total_price: 15.00

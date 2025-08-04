@@ -7,6 +7,7 @@ const mockPrisma = {
   cash_flow: {
     findMany: jest.fn(),
     findUnique: jest.fn(),
+    findFirst: jest.fn(),
     create: jest.fn(),
     update: jest.fn(),
     delete: jest.fn(),
@@ -33,7 +34,10 @@ jest.mock('../../src/middleware/rateLimiter', () => ({
 }));
 
 jest.mock('../../src/middleware/pagination', () => ({
-  paginationMiddleware: (req: any, res: any, next: any) => next(),
+  paginationMiddleware: (req: any, res: any, next: any) => {
+    req.pagination = { page: 1, limit: 10, sortBy: 'date', sortOrder: 'desc' };
+    next();
+  },
   paginationHeaders: (req: any, res: any, next: any) => next(),
   createPaginatedResponse: jest.fn((data, total, pagination) => ({
     data,
@@ -45,7 +49,8 @@ jest.mock('../../src/middleware/pagination', () => ({
       hasNextPage: pagination.page < Math.ceil(total / pagination.limit),
       hasPrevPage: pagination.page > 1
     }
-  }))
+  })),
+  getPrismaQuery: jest.fn(() => ({ skip: 0, take: 10, orderBy: { date: 'desc' } }))
 }));
 
 // Mock do cache
@@ -57,7 +62,8 @@ jest.mock('../../src/lib/cache', () => ({
     del: jest.fn()
   },
   cacheMiddleware: jest.fn(() => (req: any, res: any, next: any) => next()),
-  generateCacheKey: jest.fn(() => 'test-cache-key')
+  generateCacheKey: jest.fn(() => 'test-cache-key'),
+  clearUserCache: jest.fn()
 }));
 
 // Importar as rotas
@@ -123,7 +129,7 @@ describe('Cash Flow Routes', () => {
         payment_method: 'dinheiro'
       };
 
-      mockPrisma.cash_flow.findUnique.mockResolvedValue(mockEntry);
+      mockPrisma.cash_flow.findFirst.mockResolvedValue(mockEntry);
 
       const response = await request(app)
         .get('/cash-flow/1')
@@ -135,7 +141,7 @@ describe('Cash Flow Routes', () => {
     });
 
     it('should return 404 for non-existent entry', async () => {
-      mockPrisma.cash_flow.findUnique.mockResolvedValue(null);
+      mockPrisma.cash_flow.findFirst.mockResolvedValue(null);
 
       const response = await request(app)
         .get('/cash-flow/999')
@@ -176,11 +182,14 @@ describe('Cash Flow Routes', () => {
       expect(response.body.success).toBe(true);
       expect(response.body.data.type).toBe('entrada');
       expect(mockPrisma.cash_flow.create).toHaveBeenCalledWith({
-        data: {
-          ...entryData,
+        data: expect.objectContaining({
           type: 'entrada',
-          user_id: '123e4567-e89b-12d3-a456-426614174000'
-        }
+          user_id: '123e4567-e89b-12d3-a456-426614174000',
+          amount: 150,
+          category: 'vendas',
+          description: 'Venda de produtos',
+          payment_method: 'dinheiro'
+        })
       });
     });
 
@@ -299,7 +308,7 @@ describe('Cash Flow Routes', () => {
         ...updateData
       };
 
-      mockPrisma.cash_flow.findUnique.mockResolvedValue(existingEntry);
+      mockPrisma.cash_flow.findFirst.mockResolvedValue(existingEntry);
       mockPrisma.cash_flow.update.mockResolvedValue(updatedEntry);
 
       const response = await request(app)
@@ -313,7 +322,7 @@ describe('Cash Flow Routes', () => {
     });
 
     it('should return 404 for non-existent entry', async () => {
-      mockPrisma.cash_flow.findUnique.mockResolvedValue(null);
+      mockPrisma.cash_flow.findFirst.mockResolvedValue(null);
 
       const response = await request(app)
         .put('/cash-flow/999')
@@ -334,7 +343,7 @@ describe('Cash Flow Routes', () => {
         user_id: 'different-user-id' // Different user
       };
 
-      mockPrisma.cash_flow.findUnique.mockResolvedValue(existingEntry);
+      mockPrisma.cash_flow.findFirst.mockResolvedValue(existingEntry);
 
       const response = await request(app)
         .put('/cash-flow/1')
@@ -357,7 +366,7 @@ describe('Cash Flow Routes', () => {
         user_id: '123e4567-e89b-12d3-a456-426614174000'
       };
 
-      mockPrisma.cash_flow.findUnique.mockResolvedValue(entryToDelete);
+      mockPrisma.cash_flow.findFirst.mockResolvedValue(entryToDelete);
       mockPrisma.cash_flow.delete.mockResolvedValue(entryToDelete);
 
       const response = await request(app)
@@ -370,7 +379,7 @@ describe('Cash Flow Routes', () => {
     });
 
     it('should return 404 for non-existent entry', async () => {
-      mockPrisma.cash_flow.findUnique.mockResolvedValue(null);
+      mockPrisma.cash_flow.findFirst.mockResolvedValue(null);
 
       const response = await request(app)
         .delete('/cash-flow/999')
@@ -390,7 +399,7 @@ describe('Cash Flow Routes', () => {
         user_id: 'different-user-id' // Different user
       };
 
-      mockPrisma.cash_flow.findUnique.mockResolvedValue(entryToDelete);
+      mockPrisma.cash_flow.findFirst.mockResolvedValue(entryToDelete);
 
       const response = await request(app)
         .delete('/cash-flow/1')

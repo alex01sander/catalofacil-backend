@@ -11,13 +11,13 @@ const pagination_1 = require("../middleware/pagination");
 const cache_1 = require("../lib/cache");
 const zod_1 = require("zod");
 const prisma_1 = __importDefault(require("../lib/prisma"));
-const multer_1 = __importDefault(require("multer"));
 const supabase_1 = __importDefault(require("../lib/supabase"));
+const multer = require('multer');
 const router = (0, express_1.Router)();
 const idParamSchema = zod_1.z.object({ id: zod_1.z.string().min(1, 'ID obrigatório') });
 // Configuração do multer para upload
-const upload = (0, multer_1.default)({
-    storage: multer_1.default.memoryStorage(),
+const upload = multer({
+    storage: multer.memoryStorage,
     limits: {
         fileSize: 5 * 1024 * 1024, // 5MB limite
     }
@@ -160,7 +160,10 @@ router.post('/', auth_1.default, rateLimiter_1.uploadRateLimit, upload.single('i
         console.log('✅ Produto criado:', product.name);
         // Limpar cache do usuário após criar produto
         (0, cache_1.clearUserCache)(req.user.id);
-        res.status(201).json(product);
+        res.status(201).json({
+            success: true,
+            data: product
+        });
     }
     catch (error) {
         console.error('Erro ao criar produto:', error);
@@ -217,7 +220,11 @@ router.get('/', auth_1.default, rateLimiter_1.userRateLimit, pagination_1.pagina
             prisma_1.default.products.count({ where })
         ]);
         const response = (0, pagination_1.createPaginatedResponse)(products, totalCount, req.pagination);
-        res.json(response);
+        res.json({
+            success: true,
+            data: response.data,
+            pagination: response.pagination
+        });
     }
     catch (error) {
         console.error('Erro ao listar produtos:', error);
@@ -250,9 +257,12 @@ router.get('/:id', auth_1.default, async (req, res) => {
         }
         // Verificar se o produto pertence ao usuário
         if (product.user_id !== req.user.id) {
-            return res.status(403).json({ error: 'Produto não pertence ao usuário' });
+            return res.status(403).json({ error: 'Acesso negado' });
         }
-        res.json(product);
+        res.json({
+            success: true,
+            data: product
+        });
     }
     catch (error) {
         console.error('Erro ao buscar produto:', error);
@@ -277,7 +287,7 @@ router.put('/:id', auth_1.default, rateLimiter_1.userRateLimit, async (req, res)
             return res.status(404).json({ error: 'Produto não encontrado' });
         }
         if (existingProduct.user_id !== req.user.id) {
-            return res.status(403).json({ error: 'Produto não pertence ao usuário' });
+            return res.status(403).json({ error: 'Acesso negado' });
         }
         // Prepara os dados para atualização com mapeamento correto
         const updateData = {
@@ -327,7 +337,10 @@ router.put('/:id', auth_1.default, rateLimiter_1.userRateLimit, async (req, res)
         console.log('✅ Produto atualizado:', product.name);
         // Limpar cache do usuário após atualizar produto
         (0, cache_1.clearUserCache)(req.user.id);
-        res.json(product);
+        res.json({
+            success: true,
+            data: product
+        });
     }
     catch (error) {
         console.error('Erro ao atualizar produto:', error);
@@ -352,7 +365,7 @@ router.delete('/:id', auth_1.default, rateLimiter_1.userRateLimit, async (req, r
             return res.status(404).json({ error: 'Produto não encontrado' });
         }
         if (existingProduct.user_id !== req.user.id) {
-            return res.status(403).json({ error: 'Produto não pertence ao usuário' });
+            return res.status(403).json({ error: 'Acesso negado' });
         }
         await prisma_1.default.products.delete({
             where: { id: req.params.id }
@@ -360,7 +373,10 @@ router.delete('/:id', auth_1.default, rateLimiter_1.userRateLimit, async (req, r
         console.log('✅ Produto deletado:', existingProduct.name);
         // Limpar cache do usuário após deletar produto
         (0, cache_1.clearUserCache)(req.user.id);
-        res.status(204).send();
+        res.status(200).json({
+            success: true,
+            message: 'Produto excluído com sucesso'
+        });
     }
     catch (error) {
         console.error('Erro ao deletar produto:', error);

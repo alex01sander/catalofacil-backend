@@ -58,7 +58,11 @@ router.get('/', auth_1.default, rateLimiter_1.userRateLimit, pagination_1.pagina
             amount: parseFloat(fluxo.amount.toString())
         }));
         const response = (0, pagination_1.createPaginatedResponse)(fluxosComValorNumerico, totalCount, req.pagination);
-        res.json(response);
+        res.json({
+            success: true,
+            data: response.data,
+            pagination: response.pagination
+        });
     }
     catch (error) {
         console.error('Erro ao listar fluxo de caixa:', error);
@@ -77,8 +81,14 @@ router.get('/:id', auth_1.default, async (req, res) => {
             }
         });
         if (!fluxo)
-            return res.status(404).json({ error: 'Fluxo de caixa não encontrado' });
-        res.json(fluxo);
+            return res.status(404).json({ error: 'Entrada não encontrada' });
+        res.json({
+            success: true,
+            data: {
+                ...fluxo,
+                amount: parseFloat(fluxo.amount.toString())
+            }
+        });
     }
     catch (error) {
         console.error('Erro ao buscar fluxo de caixa:', error);
@@ -133,7 +143,13 @@ router.post('/', auth_1.default, rateLimiter_1.userRateLimit, async (req, res) =
         (0, cache_1.clearUserCache)(req.user.id);
         console.log('✅ [CashFlow] Fluxo criado com sucesso:', novo.id);
         console.log('📝 [CashFlow] === FIM DA REQUISIÇÃO ===');
-        res.status(201).json(novo);
+        res.status(201).json({
+            success: true,
+            data: {
+                ...novo,
+                amount: parseFloat(novo.amount.toString())
+            }
+        });
     }
     catch (error) {
         console.error('❌ [CashFlow] Erro ao criar fluxo:', error);
@@ -151,15 +167,18 @@ router.put('/:id', auth_1.default, rateLimiter_1.userRateLimit, async (req, res)
     if (!req.user)
         return res.status(401).json({ error: 'Usuário não autenticado' });
     try {
-        // Verificar se o fluxo pertence ao usuário
+        // Verificar se o fluxo existe
         const existingFluxo = await prisma_1.default.cash_flow.findFirst({
             where: {
-                id: req.params.id,
-                user_id: req.user.id
+                id: req.params.id
             }
         });
         if (!existingFluxo) {
-            return res.status(404).json({ error: 'Fluxo de caixa não encontrado' });
+            return res.status(404).json({ error: 'Entrada não encontrada' });
+        }
+        // Verificar se o fluxo pertence ao usuário
+        if (existingFluxo.user_id !== req.user.id) {
+            return res.status(403).json({ error: 'Acesso negado' });
         }
         const atualizado = await prisma_1.default.cash_flow.update({
             where: { id: req.params.id },
@@ -167,7 +186,13 @@ router.put('/:id', auth_1.default, rateLimiter_1.userRateLimit, async (req, res)
         });
         // Limpar cache do usuário após atualizar
         (0, cache_1.clearUserCache)(req.user.id);
-        res.json(atualizado);
+        res.json({
+            success: true,
+            data: {
+                ...atualizado,
+                amount: parseFloat(atualizado.amount.toString())
+            }
+        });
     }
     catch (error) {
         console.error('Erro ao atualizar fluxo de caixa:', error);
@@ -179,20 +204,26 @@ router.delete('/:id', auth_1.default, rateLimiter_1.userRateLimit, async (req, r
     if (!req.user)
         return res.status(401).json({ error: 'Usuário não autenticado' });
     try {
-        // Verificar se o fluxo pertence ao usuário
+        // Verificar se o fluxo existe
         const existingFluxo = await prisma_1.default.cash_flow.findFirst({
             where: {
-                id: req.params.id,
-                user_id: req.user.id
+                id: req.params.id
             }
         });
         if (!existingFluxo) {
-            return res.status(404).json({ error: 'Fluxo de caixa não encontrado' });
+            return res.status(404).json({ error: 'Entrada não encontrada' });
+        }
+        // Verificar se o fluxo pertence ao usuário
+        if (existingFluxo.user_id !== req.user.id) {
+            return res.status(403).json({ error: 'Acesso negado' });
         }
         await prisma_1.default.cash_flow.delete({ where: { id: req.params.id } });
         // Limpar cache do usuário após deletar
         (0, cache_1.clearUserCache)(req.user.id);
-        res.status(204).send();
+        res.status(200).json({
+            success: true,
+            message: 'Entrada excluída com sucesso'
+        });
     }
     catch (error) {
         console.error('Erro ao deletar fluxo de caixa:', error);
