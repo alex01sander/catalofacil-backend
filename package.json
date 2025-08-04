@@ -6,6 +6,10 @@
   "scripts": {
     "start": "node dist/index.js",
     "build": "tsc && npx prisma generate && npm run copy-non-ts",
+    "build:safe": "node build-safe.js",
+    "build:force": "node build-force.js",
+    "build:simple": "node build-simple.js",
+    "build:dev": "node build-dev.js",
     "dev": "ts-node src/index.ts",
     "postinstall": "npx prisma generate",
     "db:migrate": "npx prisma migrate deploy",

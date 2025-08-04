@@ -192,10 +192,12 @@ app.use('/flowState', flowStateRouter);
 app.use('/users', usersRouter);
 app.use('/categories', categoriesRouter);
 app.use('/categorias', categoriesRouter); // Alias em português
+app.use('/api/categorias', categoriesRouter); // Alias para compatibilidade com frontend
 app.use('/instances', instancesRouter);
 app.use('/profiles', profilesRouter);
 app.use('/mfaChallenges', mfaChallengesRouter);
 app.use('/customers', customersRouter);
+app.use('/api/customers', customersRouter); // Alias para compatibilidade com frontend
 app.use('/samlRelayStates', samlRelayStatesRouter);
 app.use('/codeChallengeMethod', codeChallengeMethodRouter);
 app.use('/controllerAdmins', controllerAdminsRouter);

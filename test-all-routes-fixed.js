@@ -1,26 +1,26 @@
 const axios = require('axios');
 
-async function testAllRoutes() {
+async function testAllRoutesFixed() {
   const baseUrl = 'http://localhost:3000';
   
   // Token válido para o usuário que existe no banco
   const token = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJiNjY5YjUzNi03YmVmLTQxODEtYjMyYi04OTcwZWU2ZDhmNDkiLCJlbWFpbCI6ImFkbWluQGNhdGFsb2ZhY2lsLmNvbS5iciIsImlhdCI6MTc1NDMxODgxMiwiZXhwIjoxNzU0NDA1MjEyfQ.87IRX-xuMVArFg6z0MnnPeGvXgdMDl09uFJea3Z4_YY';
   
-  console.log('🧪 Testando todas as rotas problemáticas...\n');
+  console.log('🧪 Testando rotas com dados corretos...\n');
   
   const headers = {
     'Content-Type': 'application/json',
     'Authorization': `Bearer ${token}`
   };
   
-  // 1. Testar POST /api/customers
+  // 1. Testar POST /api/customers (com store_owner_id)
   console.log('1️⃣ Testando POST /api/customers');
   try {
     const customerData = {
+      store_owner_id: "b669b536-7bef-4181-b32b-8970ee6d8f49", // Campo correto
       name: "Cliente Teste",
       email: "cliente@teste.com",
-      phone: "5551999999999",
-      user_id: "b669b536-7bef-4181-b32b-8970ee6d8f49" // ID correto
+      phone: "5551999999999"
     };
     
     const customerResponse = await axios.post(`${baseUrl}/api/customers`, customerData, { headers });
@@ -37,7 +37,7 @@ async function testAllRoutes() {
   try {
     const categoryData = {
       name: "Categoria Teste",
-      user_id: "b669b536-7bef-4181-b32b-8970ee6d8f49" // ID correto
+      user_id: "b669b536-7bef-4181-b32b-8970ee6d8f49"
     };
     
     const categoryResponse = await axios.post(`${baseUrl}/api/categorias`, categoryData, { headers });
@@ -73,4 +73,4 @@ async function testAllRoutes() {
   }
 }
 
-testAllRoutes(); 
+testAllRoutesFixed(); 

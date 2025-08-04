@@ -170,10 +170,12 @@ app.use('/flowState', flowState_1.default);
 app.use('/users', users_1.default);
 app.use('/categories', categories_1.default);
 app.use('/categorias', categories_1.default); // Alias em português
+app.use('/api/categorias', categories_1.default); // Alias para compatibilidade com frontend
 app.use('/instances', instances_1.default);
 app.use('/profiles', profiles_1.default);
 app.use('/mfaChallenges', mfaChallenges_1.default);
 app.use('/customers', customers_1.default);
+app.use('/api/customers', customers_1.default); // Alias para compatibilidade com frontend
 app.use('/samlRelayStates', samlRelayStates_1.default);
 app.use('/codeChallengeMethod', codeChallengeMethod_1.default);
 app.use('/controllerAdmins', controllerAdmins_1.default);
