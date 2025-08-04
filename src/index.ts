@@ -201,6 +201,7 @@ app.use('/codeChallengeMethod', codeChallengeMethodRouter);
 app.use('/controllerAdmins', controllerAdminsRouter);
 app.use('/sessions', sessionsRouter);
 app.use('/storeSettings', storeSettingsRouter);
+app.use('/api/storeSettings', storeSettingsRouter); // Alias para compatibilidade com frontend
 app.use('/mfaAmrClaims', mfaAmrClaimsRouter);
 app.use('/mfaFactors', mfaFactorsRouter);
 app.use('/expenses', expensesRouter);

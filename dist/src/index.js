@@ -179,6 +179,7 @@ app.use('/codeChallengeMethod', codeChallengeMethod_1.default);
 app.use('/controllerAdmins', controllerAdmins_1.default);
 app.use('/sessions', sessions_1.default);
 app.use('/storeSettings', storeSettings_1.default);
+app.use('/api/storeSettings', storeSettings_1.default); // Alias para compatibilidade com frontend
 app.use('/mfaAmrClaims', mfaAmrClaims_1.default);
 app.use('/mfaFactors', mfaFactors_1.default);
 app.use('/expenses', expenses_1.default);
