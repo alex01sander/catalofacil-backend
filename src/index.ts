@@ -36,6 +36,7 @@ import cashFlowRouter from './routes/cashFlow';
 import creditAccountsRouter from './routes/creditAccounts';
 import creditTransactionsRouter from './routes/creditTransactions';
 import customersRouter from './routes/customers';
+import adminRouter from './routes/admin';
 
 // Importar middlewares de otimização
 import { basicRateLimit, apiSlowDown, authRateLimit } from './middleware/rateLimiter';
@@ -221,6 +222,10 @@ app.use('/credit-accounts', creditAccountsRouter); // Alias com hífen
 app.use('/creditTransactions', creditTransactionsRouter);
 app.use('/credit-transactions', creditTransactionsRouter); // Alias com hífen
 app.use('/customers', customersRouter);
+
+// Rotas administrativas (apenas para admins)
+app.use('/admin', adminRouter);
+app.use('/api/admin', adminRouter); // Alias para compatibilidade com frontend
 
 // Middleware para rotas não encontradas
 app.use('*', (req: Request, res: Response) => {
