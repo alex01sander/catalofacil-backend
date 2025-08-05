@@ -24,11 +24,20 @@ try {
   if (fs.existsSync(srcIndexPath)) {
     console.log('✅ dist/src/index.js encontrado');
     
-    // 5. Copiar para dist/index.js
-    fs.copyFileSync(srcIndexPath, destIndexPath);
-    console.log('✅ Arquivo index.js copiado para dist/');
+    // 5. Ler o conteúdo do arquivo e ajustar os imports
+    let content = fs.readFileSync(srcIndexPath, 'utf8');
     
-    // 6. Verificar se foi criado
+    // 6. Ajustar imports relativos para funcionar em dist/
+    content = content.replace(/require\(['"]\.\/lib\//g, "require('./src/lib/");
+    content = content.replace(/require\(['"]\.\/middleware\//g, "require('./src/middleware/");
+    content = content.replace(/require\(['"]\.\/routes\//g, "require('./src/routes/");
+    content = content.replace(/require\(['"]\.\/zod\//g, "require('./src/zod/");
+    
+    // 7. Escrever o arquivo ajustado
+    fs.writeFileSync(destIndexPath, content);
+    console.log('✅ Arquivo index.js copiado e ajustado para dist/');
+    
+    // 8. Verificar se foi criado
     if (fs.existsSync(destIndexPath)) {
       console.log('✅ dist/index.js criado com sucesso!');
       console.log('📊 Tamanho do arquivo:', fs.statSync(destIndexPath).size, 'bytes');
