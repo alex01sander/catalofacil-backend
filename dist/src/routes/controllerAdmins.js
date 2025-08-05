@@ -11,15 +11,45 @@ router.get('/', async (req, res) => {
     const admins = await prisma_1.default.controller_admins.findMany({ include: { users: true } });
     res.json(admins);
 });
-// Buscar admin por ID
-router.get('/:id', async (req, res) => {
-    const admin = await prisma_1.default.controller_admins.findUnique({
-        where: { id: req.params.id },
-        include: { users: true }
-    });
-    if (!admin)
-        return res.status(404).json({ error: 'Admin não encontrado' });
-    res.json(admin);
+// Verificar se usuário é admin (por userId)
+router.get('/:userId', async (req, res) => {
+    try {
+        const { userId } = req.params;
+        // Verificar se o usuário existe e é admin
+        const user = await prisma_1.default.users.findUnique({
+            where: { id: userId },
+            select: {
+                id: true,
+                email: true,
+                role: true
+            }
+        });
+        if (!user) {
+            return res.status(404).json({ error: 'Usuário não encontrado' });
+        }
+        // Verificar se é admin (role = 'admin' ou está na tabela controller_admins)
+        const isAdmin = user.role === 'admin' || await prisma_1.default.controller_admins.findFirst({
+            where: { user_id: user.id }
+        });
+        if (!isAdmin) {
+            return res.status(403).json({
+                error: 'Usuário não é administrador',
+                isAdmin: false
+            });
+        }
+        res.json({
+            isAdmin: true,
+            user: {
+                id: user.id,
+                email: user.email,
+                role: user.role
+            }
+        });
+    }
+    catch (error) {
+        console.error('Erro ao verificar admin:', error);
+        res.status(500).json({ error: 'Erro interno do servidor' });
+    }
 });
 // Criar admin
 router.post('/', async (req, res) => {

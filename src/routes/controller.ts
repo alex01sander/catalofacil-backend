@@ -13,6 +13,8 @@ interface AdminRequest extends Request {
 
 const router = express.Router();
 
+
+
 // Middleware de autenticação admin para todas as rotas do controller
 router.use(authenticateAdmin);
 
