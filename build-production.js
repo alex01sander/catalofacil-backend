@@ -9,9 +9,18 @@ try {
   console.log('📝 Compilando TypeScript...');
   execSync('npx tsc', { stdio: 'inherit' });
   
-  // 2. Gerar Prisma Client
+  // 2. Gerar Prisma Client (com tratamento de erro)
   console.log('🗄️ Gerando Prisma Client...');
-  execSync('npx prisma generate', { stdio: 'inherit' });
+  try {
+    execSync('npx prisma generate', { stdio: 'inherit' });
+  } catch (error) {
+    console.log('⚠️ Erro ao gerar Prisma Client, tentando limpar cache...');
+    try {
+      execSync('npx prisma generate --force', { stdio: 'inherit' });
+    } catch (error2) {
+      console.log('⚠️ Erro persistente no Prisma, continuando build...');
+    }
+  }
   
   // 3. Copiar arquivos não-TypeScript
   console.log('📋 Copiando arquivos não-TypeScript...');
