@@ -37,6 +37,7 @@ import creditAccountsRouter from './routes/creditAccounts';
 import creditTransactionsRouter from './routes/creditTransactions';
 import customersRouter from './routes/customers';
 import adminRouter from './routes/admin';
+import controllerRouter from './routes/controller';
 
 // Importar middlewares de otimização
 import { basicRateLimit, apiSlowDown, authRateLimit } from './middleware/rateLimiter';
@@ -226,6 +227,10 @@ app.use('/customers', customersRouter);
 // Rotas administrativas (apenas para admins)
 app.use('/admin', adminRouter);
 app.use('/api/admin', adminRouter); // Alias para compatibilidade com frontend
+
+// Controller Admin Dashboard (apenas para admins)
+app.use('/controller', controllerRouter);
+app.use('/api/controller', controllerRouter); // Alias para compatibilidade com frontend
 
 // Middleware para rotas não encontradas
 app.use('*', (req: Request, res: Response) => {

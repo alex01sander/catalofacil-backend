@@ -41,6 +41,7 @@ const creditAccounts_1 = __importDefault(require("./routes/creditAccounts"));
 const creditTransactions_1 = __importDefault(require("./routes/creditTransactions"));
 const customers_1 = __importDefault(require("./routes/customers"));
 const admin_1 = __importDefault(require("./routes/admin"));
+const controller_1 = __importDefault(require("./routes/controller"));
 // Importar middlewares de otimização
 const rateLimiter_1 = require("./middleware/rateLimiter");
 const cache_1 = require("./lib/cache");
@@ -203,6 +204,9 @@ app.use('/customers', customers_1.default);
 // Rotas administrativas (apenas para admins)
 app.use('/admin', admin_1.default);
 app.use('/api/admin', admin_1.default); // Alias para compatibilidade com frontend
+// Controller Admin Dashboard (apenas para admins)
+app.use('/controller', controller_1.default);
+app.use('/api/controller', controller_1.default); // Alias para compatibilidade com frontend
 // Middleware para rotas não encontradas
 app.use('*', (req, res) => {
     // Não capturar requisições de arquivos estáticos
