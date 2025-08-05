@@ -203,6 +203,7 @@ app.use('/api/customers', customersRouter); // Alias para compatibilidade com fr
 app.use('/samlRelayStates', samlRelayStatesRouter);
 app.use('/codeChallengeMethod', codeChallengeMethodRouter);
 app.use('/controllerAdmins', controllerAdminsRouter);
+app.use('/api/controller-admins', controllerAdminsRouter); // Alias para compatibilidade com frontend
 app.use('/sessions', sessionsRouter);
 app.use('/storeSettings', storeSettingsRouter);
 app.use('/api/storeSettings', storeSettingsRouter); // Alias para compatibilidade com frontend
