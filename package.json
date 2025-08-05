@@ -5,7 +5,7 @@
   "main": "dist/index.js",
   "scripts": {
     "start": "node dist/index.js",
-    "build": "tsc && npx prisma generate && npm run copy-non-ts && npm run fix-dist-structure",
+    "build": "node build-production.js",
     "build:safe": "node build-safe.js",
     "build:force": "node build-force.js",
     "build:simple": "node build-simple.js",
@@ -19,7 +19,7 @@
     "test:coverage": "jest --coverage",
     "test:verbose": "jest --verbose",
     "copy-non-ts": "cpx \"src/lib/supabase.js\" dist/src/lib/",
-    "fix-dist-structure": "node -e \"const fs=require('fs');const path=require('path');if(fs.existsSync('dist/src/index.js')){fs.copyFileSync('dist/src/index.js','dist/index.js');console.log('✅ Arquivo index.js copiado para dist/');}\""
+    "fix-dist-structure": "node -e \"const fs=require('fs');const path=require('path');if(fs.existsSync('dist/src/index.js')){fs.copyFileSync('dist/src/index.js','dist/index.js');console.log('✅ Arquivo index.js copiado para dist/');}else{console.log('❌ Arquivo dist/src/index.js não encontrado');}\""
   },
   "dependencies": {
     "@prisma/client": "^6.11.1",
