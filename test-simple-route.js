@@ -31,7 +31,7 @@ const testServer = () => {
 const testControllerAdminsDirect = () => {
   console.log('\n🔍 Testando rota controllerAdmins diretamente...');
   
-  const req = http.get('http://localhost:3000/controllerAdmins', (res) => {
+  const req = http.get('http://localhost:3000/controllerAdmins/test', (res) => {
     console.log(`📊 Status: ${res.statusCode}`);
     
     let data = '';
@@ -49,17 +49,16 @@ const testControllerAdminsDirect = () => {
   });
   
   req.setTimeout(5000, () => {
-    console.log('⏰ Timeout');
+    console.log('⏰ Timeout - rota não respondeu');
     req.destroy();
   });
 };
 
-// Testar rota com userId
-const testControllerAdminsWithUserId = () => {
-  console.log('\n🔍 Testando rota controllerAdmins com userId...');
+// Testar rota com alias
+const testControllerAdminsAlias = () => {
+  console.log('\n🔍 Testando rota com alias /api/controller-admins...');
   
-  const userId = '53841ae3-5489-485b-b05d-07857d562e51';
-  const req = http.get(`http://localhost:3000/controllerAdmins/${userId}`, (res) => {
+  const req = http.get('http://localhost:3000/api/controller-admins/test', (res) => {
     console.log(`📊 Status: ${res.statusCode}`);
     
     let data = '';
@@ -77,14 +76,12 @@ const testControllerAdminsWithUserId = () => {
   });
   
   req.setTimeout(5000, () => {
-    console.log('⏰ Timeout');
+    console.log('⏰ Timeout - rota não respondeu');
     req.destroy();
   });
 };
 
 // Executar testes
-console.log('🚀 Iniciando testes simples...\n');
-
 testServer();
 setTimeout(testControllerAdminsDirect, 1000);
-setTimeout(testControllerAdminsWithUserId, 2000); 
+setTimeout(testControllerAdminsAlias, 2000); 
