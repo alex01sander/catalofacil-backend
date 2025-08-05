@@ -34,7 +34,9 @@ try {
     content = content.replace(/require\(['"]\.\/zod\//g, "require('./src/zod/");
     
     // 7. Corrigir aspas quebradas (caso o regex quebre)
-    content = content.replace(/require\('\.\/src\/lib\/prisma"\)/g, "require('./src/lib/prisma')");
+    content = content.replace(/require\('\.\/src\/lib\/[^"']*"\)/g, (match) => {
+      return match.replace(/"\)$/, "')");
+    });
     content = content.replace(/require\('\.\/src\/middleware\/[^"']*"\)/g, (match) => {
       return match.replace(/"\)$/, "')");
     });
