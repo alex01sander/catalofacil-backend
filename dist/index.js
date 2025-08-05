@@ -44,7 +44,7 @@ const admin_1 = __importDefault(require('./src/routes/admin'));
 const controller_1 = __importDefault(require('./src/routes/controller'));
 // Importar middlewares de otimização
 const rateLimiter_1 = require('./src/middleware/rateLimiter');
-const cache_1 = require('./src/lib/cache");
+const cache_1 = require('./src/lib/cache');
 const app = (0, express_1.default)();
 exports.app = app;
 // Configuração para confiar no proxy do Render/Vercel
