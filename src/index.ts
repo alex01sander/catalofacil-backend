@@ -38,7 +38,6 @@ import creditTransactionsRouter from './routes/creditTransactions';
 import customersRouter from './routes/customers';
 import adminRouter from './routes/admin';
 import controllerRouter from './routes/controller';
-import adminManagementRouter from './routes/admin';
 
 // Importar middlewares de otimização
 import { basicRateLimit, apiSlowDown, authRateLimit } from './middleware/rateLimiter';
@@ -231,8 +230,8 @@ app.use('/admin', adminRouter);
 app.use('/api/admin', adminRouter); // Alias para compatibilidade com frontend
 
 // Rotas de gerenciamento de usuários e domínios (apenas para admins)
-app.use('/admin-management', adminManagementRouter);
-app.use('/api/admin-management', adminManagementRouter); // Alias para compatibilidade com frontend
+app.use('/admin-management', adminRouter);
+app.use('/api/admin-management', adminRouter); // Alias para compatibilidade com frontend
 
 // Controller Admin Dashboard (apenas para admins)
 app.use('/controller', controllerRouter);
