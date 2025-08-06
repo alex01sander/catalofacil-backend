@@ -373,4 +373,32 @@ router.get('/stats', requireAdmin, async (req, res) => {
     }
 });
 
+// 7. Estatísticas gerais (rota alternativa)
+router.get('/statistics', requireAdmin, async (req, res) => {
+    const client = new Client({
+        connectionString: process.env.DATABASE_URL,
+        ssl: { rejectUnauthorized: false }
+    });
+    
+    try {
+        await client.connect();
+        
+        const stats = await client.query(`
+            SELECT 
+                (SELECT COUNT(*) FROM auth.users) as total_users,
+                (SELECT COUNT(*) FROM auth.users WHERE role = 'admin') as total_admins,
+                (SELECT COUNT(*) FROM auth.users WHERE role = 'user') as total_clients,
+                (SELECT COUNT(*) FROM public.domain_owners) as total_domains,
+                (SELECT COUNT(*) FROM public.stores) as total_stores
+        `);
+        
+        res.json(stats.rows[0]);
+    } catch (error) {
+        console.error('Erro ao buscar estatísticas:', error);
+        res.status(500).json({ error: 'Erro interno do servidor' });
+    } finally {
+        await client.end();
+    }
+});
+
 export default router; 
