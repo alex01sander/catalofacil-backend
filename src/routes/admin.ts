@@ -1,7 +1,7 @@
-import express from 'express';
+import * as express from 'express';
 import { Client } from 'pg';
-import bcrypt from 'bcrypt';
-import jwt from 'jsonwebtoken';
+import * as bcrypt from 'bcrypt';
+import * as jwt from 'jsonwebtoken';
 
 const router = express.Router();
 
@@ -279,7 +279,7 @@ router.delete('/users/:userId', requireAdmin, async (req, res) => {
         await client.connect();
         
         // Verificar se não é o último admin
-        if (req.user?.id === userId) {
+        if ((req as any).user?.id === userId) {
             const adminCount = await client.query(`
                 SELECT COUNT(*) as count FROM auth.users WHERE role = 'admin'
             `);
