@@ -1,1084 +1,376 @@
 import express from 'express';
-import { authenticateAdmin } from '../middleware/adminAuth';
-import prisma from '../lib/prisma';
-import crypto from 'crypto';
+import { Client } from 'pg';
+import bcrypt from 'bcrypt';
+import jwt from 'jsonwebtoken';
 
 const router = express.Router();
 
-// Middleware de autenticação admin para todas as rotas
-router.use(authenticateAdmin);
+// Middleware para verificar se é admin
+const requireAdmin = async (req: any, res: any, next: any) => {
+    try {
+        const token = req.headers.authorization?.replace('Bearer ', '');
+        if (!token) {
+            return res.status(401).json({ error: 'Token não fornecido' });
+        }
 
-// ===== DASHBOARD ADMIN =====
-router.get('/dashboard', async (req, res) => {
-  try {
-    // Estatísticas gerais
-    const totalUsers = await prisma.users.count();
-    const totalStores = await prisma.stores.count();
-    const totalProducts = await prisma.products.count();
-    const totalCustomers = await prisma.customers.count();
-    const totalOrders = await prisma.orders.count();
-    const totalSales = await prisma.sales.count();
-    
-    // Vendas do mês
-    const currentMonth = new Date();
-    currentMonth.setDate(1);
-    currentMonth.setHours(0, 0, 0, 0);
-    
-    const monthlySales = await prisma.sales.aggregate({
-      where: {
-        created_at: {
-          gte: currentMonth
+        const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as any;
+        
+        // Verificar se é admin
+        const client = new Client({
+            connectionString: process.env.DATABASE_URL,
+            ssl: { rejectUnauthorized: false }
+        });
+        
+        await client.connect();
+        
+        const userResult = await client.query(`
+            SELECT u.id, u.email, u.role 
+            FROM auth.users u 
+            WHERE u.id = $1
+        `, [decoded.id]);
+        
+        await client.end();
+        
+        if (userResult.rows.length === 0 || userResult.rows[0].role !== 'admin') {
+            return res.status(403).json({ error: 'Acesso negado. Apenas administradores.' });
         }
-      },
-      _sum: {
-        total_price: true
-      }
+        
+        req.user = userResult.rows[0];
+        next();
+    } catch (error) {
+        return res.status(401).json({ error: 'Token inválido' });
+    }
+};
+
+// 1. Listar todos os usuários
+router.get('/users', requireAdmin, async (req, res) => {
+    const client = new Client({
+        connectionString: process.env.DATABASE_URL,
+        ssl: { rejectUnauthorized: false }
     });
     
-    // Produtos mais vendidos
-    const topProducts = await prisma.sales.groupBy({
-      by: ['product_name'],
-      _sum: {
-        quantity: true
-      },
-      orderBy: {
-        _sum: {
-          quantity: 'desc'
-        }
-      },
-      take: 5
-    });
-    
-    res.json({
-      stats: {
-        totalUsers,
-        totalStores,
-        totalProducts,
-        totalCustomers,
-        totalOrders,
-        totalSales,
-        monthlyRevenue: monthlySales._sum.total_price || 0
-      },
-      topProducts
-    });
-  } catch (error) {
-    console.error('Erro no dashboard:', error);
-    res.status(500).json({ error: 'Erro interno do servidor' });
-  }
+    try {
+        await client.connect();
+        
+        const result = await client.query(`
+            SELECT 
+                u.id,
+                u.email,
+                u.role,
+                u.created_at,
+                u.updated_at,
+                do.domain,
+                s.name as store_name,
+                s.slug as store_slug
+            FROM auth.users u
+            LEFT JOIN public.domain_owners do ON u.id = do.user_id
+            LEFT JOIN public.stores s ON do.domain = s.domain
+            ORDER BY u.created_at DESC
+        `);
+        
+        res.json({
+            users: result.rows,
+            total: result.rows.length
+        });
+    } catch (error) {
+        console.error('Erro ao listar usuários:', error);
+        res.status(500).json({ error: 'Erro interno do servidor' });
+    } finally {
+        await client.end();
+    }
 });
 
-// ===== GERENCIAMENTO DE USUÁRIOS =====
-router.get('/users', async (req, res) => {
-  try {
-    const { page = 1, limit = 10, search = '' } = req.query;
-    const skip = (Number(page) - 1) * Number(limit);
+// 2. Cadastrar novo usuário
+router.post('/users', requireAdmin, async (req, res) => {
+    const { email, password, domain, role = 'user' } = req.body;
     
-    const where = search ? {
-      OR: [
-        { email: { contains: search as string, mode: 'insensitive' as any } },
-        { id: { contains: search as string, mode: 'insensitive' as any } }
-      ]
-    } : {};
-    
-    const [users, total] = await Promise.all([
-      prisma.users.findMany({
-        where,
-        select: {
-          id: true,
-          email: true,
-          role: true,
-          created_at: true,
-          updated_at: true
-        },
-        skip,
-        take: Number(limit),
-        orderBy: { created_at: 'desc' }
-      }),
-      prisma.users.count({ where })
-    ]);
-    
-    res.json({
-      users,
-      pagination: {
-        page: Number(page),
-        limit: Number(limit),
-        total,
-        pages: Math.ceil(total / Number(limit))
-      }
-    });
-  } catch (error) {
-    console.error('Erro ao buscar usuários:', error);
-    res.status(500).json({ error: 'Erro interno do servidor' });
-  }
-});
-
-router.get('/users/:id', async (req, res) => {
-  try {
-    const user = await prisma.users.findUnique({
-      where: { id: req.params.id },
-      select: {
-        id: true,
-        email: true,
-        role: true,
-        created_at: true,
-        updated_at: true
-      }
-    });
-    
-    if (!user) {
-      return res.status(404).json({ error: 'Usuário não encontrado' });
+    if (!email || !password || !domain) {
+        return res.status(400).json({ 
+            error: 'Email, senha e domínio são obrigatórios' 
+        });
     }
     
-    res.json(user);
-  } catch (error) {
-    console.error('Erro ao buscar usuário:', error);
-    res.status(500).json({ error: 'Erro interno do servidor' });
-  }
-});
-
-router.put('/users/:id', async (req, res) => {
-  try {
-    const { role } = req.body;
-    
-    const user = await prisma.users.update({
-      where: { id: req.params.id },
-      data: { role },
-      select: {
-        id: true,
-        email: true,
-        role: true,
-        updated_at: true
-      }
+    const client = new Client({
+        connectionString: process.env.DATABASE_URL,
+        ssl: { rejectUnauthorized: false }
     });
     
-    res.json(user);
-  } catch (error) {
-    console.error('Erro ao atualizar usuário:', error);
-    res.status(500).json({ error: 'Erro interno do servidor' });
-  }
-});
-
-// ===== GERENCIAMENTO DE LOJAS =====
-router.get('/stores', async (req, res) => {
-  try {
-    const { page = 1, limit = 10, search = '' } = req.query;
-    const skip = (Number(page) - 1) * Number(limit);
-    
-    const where = search ? {
-      OR: [
-        { name: { contains: search as string, mode: 'insensitive' as any } },
-        { slug: { contains: search as string, mode: 'insensitive' as any } }
-      ]
-    } : {};
-    
-    const [stores, total] = await Promise.all([
-      prisma.stores.findMany({
-        where,
-        include: {
-          users: {
-            select: {
-              id: true,
-              email: true
+    try {
+        await client.connect();
+        
+        // Verificar se email já existe
+        const existingUser = await client.query(`
+            SELECT id FROM auth.users WHERE email = $1
+        `, [email]);
+        
+        if (existingUser.rows.length > 0) {
+            return res.status(400).json({ error: 'Email já cadastrado' });
+        }
+        
+        // Verificar se domínio já existe
+        const existingDomain = await client.query(`
+            SELECT domain FROM public.domain_owners WHERE domain = $1
+        `, [domain]);
+        
+        if (existingDomain.rows.length > 0) {
+            return res.status(400).json({ error: 'Domínio já cadastrado' });
+        }
+        
+        // Hash da senha
+        const hashedPassword = await bcrypt.hash(password, 10);
+        
+        // Gerar ID único
+        const userId = `user-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        
+        // Inserir usuário
+        await client.query(`
+            INSERT INTO auth.users (id, email, encrypted_password, role, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, NOW(), NOW())
+        `, [userId, email, hashedPassword, role]);
+        
+        // Inserir domínio
+        await client.query(`
+            INSERT INTO public.domain_owners (id, user_id, domain, created_at, updated_at)
+            VALUES (gen_random_uuid(), $1, $2, NOW(), NOW())
+        `, [userId, domain]);
+        
+        // Criar loja padrão
+        const storeId = `store-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        const slug = domain.replace('.catalofacil.com.br', '');
+        
+        await client.query(`
+            INSERT INTO public.stores (id, name, description, logo_url, banner_url, whatsapp_number, instagram_url, theme_color, user_id, domain, slug, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW())
+        `, [
+            storeId,
+            `${slug.charAt(0).toUpperCase() + slug.slice(1)} Catálogo`,
+            `Loja ${slug}`,
+            'https://via.placeholder.com/150x50/007bff/ffffff?text=Logo',
+            'https://via.placeholder.com/1200x300/007bff/ffffff?text=Banner',
+            '5551999999999',
+            'https://instagram.com/' + slug,
+            '#007bff',
+            userId,
+            domain,
+            slug
+        ]);
+        
+        // Criar configurações da loja
+        await client.query(`
+            INSERT INTO public.store_settings (id, user_id, store_name, store_description, store_subtitle, instagram_url, whatsapp_number, mobile_logo, desktop_banner, mobile_banner_image, mobile_banner_color, created_at, updated_at)
+            VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
+        `, [
+            userId,
+            `${slug.charAt(0).toUpperCase() + slug.slice(1)} Catálogo`,
+            `Loja ${slug}`,
+            'Produtos Incríveis',
+            'https://instagram.com/' + slug,
+            '5551999999999',
+            'https://via.placeholder.com/150x50/007bff/ffffff?text=Logo',
+            'https://via.placeholder.com/1200x300/007bff/ffffff?text=Banner',
+            'https://via.placeholder.com/400x200/007bff/ffffff?text=Mobile+Banner',
+            'from-blue-400 via-blue-500 to-blue-600'
+        ]);
+        
+        // Se for admin, adicionar na tabela controller_admins
+        if (role === 'admin') {
+            await client.query(`
+                INSERT INTO public.controller_admins (id, user_id, email, created_at, updated_at)
+                VALUES (gen_random_uuid(), $1, $2, NOW(), NOW())
+            `, [userId, email]);
+        }
+        
+        res.status(201).json({
+            message: 'Usuário cadastrado com sucesso',
+            user: {
+                id: userId,
+                email,
+                role,
+                domain
             }
-          }
-        },
-        skip,
-        take: Number(limit),
-        orderBy: { created_at: 'desc' }
-      }),
-      prisma.stores.count({ where })
-    ]);
-    
-    res.json({
-      stores,
-      pagination: {
-        page: Number(page),
-        limit: Number(limit),
-        total,
-        pages: Math.ceil(total / Number(limit))
-      }
-    });
-  } catch (error) {
-    console.error('Erro ao buscar lojas:', error);
-    res.status(500).json({ error: 'Erro interno do servidor' });
-  }
+        });
+        
+    } catch (error) {
+        console.error('Erro ao cadastrar usuário:', error);
+        res.status(500).json({ error: 'Erro interno do servidor' });
+    } finally {
+        await client.end();
+    }
 });
 
-router.get('/stores/:id', async (req, res) => {
-  try {
-    const store = await prisma.stores.findUnique({
-      where: { id: req.params.id },
-      include: {
-        users: {
-          select: {
-            id: true,
-            email: true
-          }
-        },
-        products: {
-          select: {
-            id: true,
-            name: true,
-            price: true,
-            is_active: true
-          }
-        },
-        customers: {
-          select: {
-            id: true,
-            name: true,
-            email: true
-          }
+// 3. Atualizar usuário
+router.put('/users/:userId', requireAdmin, async (req, res) => {
+    const { userId } = req.params;
+    const { email, role, domain } = req.body;
+    
+    const client = new Client({
+        connectionString: process.env.DATABASE_URL,
+        ssl: { rejectUnauthorized: false }
+    });
+    
+    try {
+        await client.connect();
+        
+        // Atualizar usuário
+        if (email) {
+            await client.query(`
+                UPDATE auth.users 
+                SET email = $1, updated_at = NOW()
+                WHERE id = $2
+            `, [email, userId]);
         }
-      }
-    });
-    
-    if (!store) {
-      return res.status(404).json({ error: 'Loja não encontrada' });
-    }
-    
-    res.json(store);
-  } catch (error) {
-    console.error('Erro ao buscar loja:', error);
-    res.status(500).json({ error: 'Erro interno do servidor' });
-  }
-});
-
-// ===== RELATÓRIOS =====
-router.get('/reports/sales', async (req, res) => {
-  try {
-    const { startDate, endDate, storeId } = req.query;
-    
-    const where: any = {};
-    
-    if (startDate && endDate) {
-      where.created_at = {
-        gte: new Date(startDate as string),
-        lte: new Date(endDate as string)
-      };
-    }
-    
-    if (storeId) {
-      where.store_id = storeId;
-    }
-    
-    const sales = await prisma.sales.findMany({
-      where,
-      include: {
-        stores: {
-          select: {
-            name: true,
-            slug: true
-          }
-        }
-      },
-      orderBy: { created_at: 'desc' }
-    });
-    
-    const totalRevenue = sales.reduce((sum, sale) => sum + Number(sale.total_price), 0);
-    const totalQuantity = sales.reduce((sum, sale) => sum + Number(sale.quantity), 0);
-    
-    res.json({
-      sales,
-      summary: {
-        totalSales: sales.length,
-        totalRevenue,
-        totalQuantity,
-        averageOrderValue: sales.length > 0 ? totalRevenue / sales.length : 0
-      }
-    });
-  } catch (error) {
-    console.error('Erro ao gerar relatório de vendas:', error);
-    res.status(500).json({ error: 'Erro interno do servidor' });
-  }
-});
-
-router.get('/reports/products', async (req, res) => {
-  try {
-    const products = await prisma.products.findMany({
-      include: {
-        stores: {
-          select: {
-            name: true,
-            slug: true
-          }
-        },
-        categories: {
-          select: {
-            name: true
-          }
-        }
-      },
-      orderBy: { created_at: 'desc' }
-    });
-    
-    const activeProducts = products.filter(p => p.is_active);
-    const inactiveProducts = products.filter(p => !p.is_active);
-    
-    res.json({
-      products,
-      summary: {
-        total: products.length,
-        active: activeProducts.length,
-        inactive: inactiveProducts.length
-      }
-    });
-  } catch (error) {
-    console.error('Erro ao gerar relatório de produtos:', error);
-    res.status(500).json({ error: 'Erro interno do servidor' });
-  }
-});
-
-// ===== GERENCIAMENTO DE PRODUTOS =====
-router.get('/products', async (req, res) => {
-  try {
-    const { page = 1, limit = 10, search = '', storeId = '' } = req.query;
-    const skip = (Number(page) - 1) * Number(limit);
-    
-    const where: any = {};
-    
-    if (search) {
-      where.OR = [
-        { name: { contains: search as string, mode: 'insensitive' as any } },
-        { description: { contains: search as string, mode: 'insensitive' as any } }
-      ];
-    }
-    
-    if (storeId) {
-      where.store_id = storeId;
-    }
-    
-    const [products, total] = await Promise.all([
-      prisma.products.findMany({
-        where,
-        include: {
-          stores: {
-            select: {
-              id: true,
-              name: true,
-              slug: true
+        
+        if (role) {
+            await client.query(`
+                UPDATE auth.users 
+                SET role = $1, updated_at = NOW()
+                WHERE id = $2
+            `, [role, userId]);
+            
+            // Atualizar controller_admins
+            if (role === 'admin') {
+                await client.query(`
+                    INSERT INTO public.controller_admins (id, user_id, email, created_at, updated_at)
+                    VALUES (gen_random_uuid(), $1, $2, NOW(), NOW())
+                    ON CONFLICT (user_id) DO NOTHING
+                `, [userId, email]);
+            } else {
+                await client.query(`
+                    DELETE FROM public.controller_admins WHERE user_id = $1
+                `, [userId]);
             }
-          },
-          categories: {
-            select: {
-              id: true,
-              name: true
-            }
-          }
-        },
-        skip,
-        take: Number(limit),
-        orderBy: { created_at: 'desc' }
-      }),
-      prisma.products.count({ where })
-    ]);
-    
-    res.json({
-      products,
-      pagination: {
-        page: Number(page),
-        limit: Number(limit),
-        total,
-        pages: Math.ceil(total / Number(limit))
-      }
-    });
-  } catch (error) {
-    console.error('Erro ao buscar produtos:', error);
-    res.status(500).json({ error: 'Erro interno do servidor' });
-  }
-});
-
-router.get('/products/:id', async (req, res) => {
-  try {
-    const product = await prisma.products.findUnique({
-      where: { id: req.params.id },
-      include: {
-        stores: {
-          select: {
-            id: true,
-            name: true,
-            slug: true
-          }
-        },
-        categories: {
-          select: {
-            id: true,
-            name: true
-          }
         }
-      }
-    });
-    
-    if (!product) {
-      return res.status(404).json({ error: 'Produto não encontrado' });
-    }
-    
-    res.json(product);
-  } catch (error) {
-    console.error('Erro ao buscar produto:', error);
-    res.status(500).json({ error: 'Erro interno do servidor' });
-  }
-});
-
-// ===== GERENCIAMENTO DE CATEGORIAS =====
-router.get('/categories', async (req, res) => {
-  try {
-    const { page = 1, limit = 10, search = '', storeId = '' } = req.query;
-    const skip = (Number(page) - 1) * Number(limit);
-    
-    const where: any = {};
-    
-    if (search) {
-      where.name = { contains: search as string, mode: 'insensitive' as any };
-    }
-    
-    if (storeId) {
-      where.store_id = storeId;
-    }
-    
-    const [categories, total] = await Promise.all([
-      prisma.categories.findMany({
-        where,
-        include: {
-          stores: {
-            select: {
-              id: true,
-              name: true,
-              slug: true
-            }
-          },
-          products: {
-            select: {
-              id: true,
-              name: true,
-              price: true
-            }
-          }
-        },
-        skip,
-        take: Number(limit),
-        orderBy: { name: 'asc' }
-      }),
-      prisma.categories.count({ where })
-    ]);
-    
-    res.json({
-      categories,
-      pagination: {
-        page: Number(page),
-        limit: Number(limit),
-        total,
-        pages: Math.ceil(total / Number(limit))
-      }
-    });
-  } catch (error) {
-    console.error('Erro ao buscar categorias:', error);
-    res.status(500).json({ error: 'Erro interno do servidor' });
-  }
-});
-
-// ===== GERENCIAMENTO DE PEDIDOS =====
-router.get('/orders', async (req, res) => {
-  try {
-    const { page = 1, limit = 10, status = '', storeId = '' } = req.query;
-    const skip = (Number(page) - 1) * Number(limit);
-    
-    const where: any = {};
-    
-    if (status) {
-      where.status = status;
-    }
-    
-    if (storeId) {
-      where.store_id = storeId;
-    }
-    
-    const [orders, total] = await Promise.all([
-      prisma.orders.findMany({
-        where,
-        include: {
-          stores: {
-            select: {
-              id: true,
-              name: true,
-              slug: true
-            }
-          },
-          customers: {
-            select: {
-              id: true,
-              name: true,
-              email: true
-            }
-          },
-          order_items: {
-            select: {
-              id: true,
-              quantity: true,
-              products: {
-                select: {
-                  id: true,
-                  name: true
-                }
-              }
-            }
-          }
-        },
-        skip,
-        take: Number(limit),
-        orderBy: { created_at: 'desc' }
-      }),
-      prisma.orders.count({ where })
-    ]);
-    
-    res.json({
-      orders,
-      pagination: {
-        page: Number(page),
-        limit: Number(limit),
-        total,
-        pages: Math.ceil(total / Number(limit))
-      }
-    });
-  } catch (error) {
-    console.error('Erro ao buscar pedidos:', error);
-    res.status(500).json({ error: 'Erro interno do servidor' });
-  }
-});
-
-// ===== GERENCIAMENTO DE CLIENTES =====
-router.get('/customers', async (req, res) => {
-  try {
-    const { page = 1, limit = 10, search = '', storeId = '' } = req.query;
-    const skip = (Number(page) - 1) * Number(limit);
-    
-    const where: any = {};
-    
-    if (search) {
-      where.OR = [
-        { name: { contains: search as string, mode: 'insensitive' as any } },
-        { email: { contains: search as string, mode: 'insensitive' as any } },
-        { phone: { contains: search as string, mode: 'insensitive' as any } }
-      ];
-    }
-    
-    if (storeId) {
-      where.store_id = storeId;
-    }
-    
-    const [customers, total] = await Promise.all([
-      prisma.customers.findMany({
-        where,
-        include: {
-          stores: {
-            select: {
-              id: true,
-              name: true,
-              slug: true
-            }
-          }
-        },
-        skip,
-        take: Number(limit),
-        orderBy: { created_at: 'desc' }
-      }),
-      prisma.customers.count({ where })
-    ]);
-    
-    res.json({
-      customers,
-      pagination: {
-        page: Number(page),
-        limit: Number(limit),
-        total,
-        pages: Math.ceil(total / Number(limit))
-      }
-    });
-  } catch (error) {
-    console.error('Erro ao buscar clientes:', error);
-    res.status(500).json({ error: 'Erro interno do servidor' });
-  }
-});
-
-// ===== RELATÓRIOS AVANÇADOS =====
-router.get('/reports/financial', async (req, res) => {
-  try {
-    const { startDate, endDate, storeId } = req.query;
-    
-    const where: any = {};
-    
-    if (startDate && endDate) {
-      where.created_at = {
-        gte: new Date(startDate as string),
-        lte: new Date(endDate as string)
-      };
-    }
-    
-    if (storeId) {
-      where.store_id = storeId;
-    }
-    
-    // Vendas
-    const sales = await prisma.sales.findMany({
-      where,
-      include: {
-        stores: {
-          select: {
-            name: true,
-            slug: true
-          }
+        
+        // Atualizar domínio
+        if (domain) {
+            await client.query(`
+                UPDATE public.domain_owners 
+                SET domain = $1, updated_at = NOW()
+                WHERE user_id = $2
+            `, [domain, userId]);
+            
+            await client.query(`
+                UPDATE public.stores 
+                SET domain = $1, updated_at = NOW()
+                WHERE user_id = $2
+            `, [domain, userId]);
         }
-      }
-    });
-    
-    // Fluxo de caixa
-    const cashFlow = await prisma.cash_flow.findMany({
-      where
-    });
-    
-    // Despesas
-    const expenses = await prisma.expenses.findMany({
-      where
-    });
-    
-    const totalRevenue = sales.reduce((sum, sale) => sum + Number(sale.total_price), 0);
-    const totalExpenses = expenses.reduce((sum, expense) => sum + Number(expense.amount), 0);
-    const netProfit = totalRevenue - totalExpenses;
-    
-    res.json({
-      sales,
-      cashFlow,
-      expenses,
-      summary: {
-        totalRevenue,
-        totalExpenses,
-        netProfit,
-        profitMargin: totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0
-      }
-    });
-  } catch (error) {
-    console.error('Erro ao gerar relatório financeiro:', error);
-    res.status(500).json({ error: 'Erro interno do servidor' });
-  }
-});
-
-router.get('/reports/inventory', async (req, res) => {
-  try {
-    const { storeId } = req.query;
-    
-    const where: any = {};
-    
-    if (storeId) {
-      where.store_id = storeId;
+        
+        res.json({ message: 'Usuário atualizado com sucesso' });
+        
+    } catch (error) {
+        console.error('Erro ao atualizar usuário:', error);
+        res.status(500).json({ error: 'Erro interno do servidor' });
+    } finally {
+        await client.end();
     }
-    
-    const products = await prisma.products.findMany({
-      where,
-      include: {
-        stores: {
-          select: {
-            name: true,
-            slug: true
-          }
-        },
-        categories: {
-          select: {
-            name: true
-          }
-        }
-      }
-    });
-    
-    const lowStock = products.filter(p => Number(p.stock) < 10);
-    const outOfStock = products.filter(p => Number(p.stock) === 0);
-    const activeProducts = products.filter(p => p.is_active);
-    
-    const totalValue = products.reduce((sum, p) => sum + (Number(p.price) * Number(p.stock)), 0);
-    
-    res.json({
-      products,
-      summary: {
-        total: products.length,
-        active: activeProducts.length,
-        inactive: products.length - activeProducts.length,
-        lowStock: lowStock.length,
-        outOfStock: outOfStock.length,
-        totalValue
-      },
-      alerts: {
-        lowStock,
-        outOfStock
-      }
-    });
-  } catch (error) {
-    console.error('Erro ao gerar relatório de estoque:', error);
-    res.status(500).json({ error: 'Erro interno do servidor' });
-  }
 });
 
-// ===== GERENCIAMENTO DE DOMÍNIOS =====
-router.get('/domains', async (req, res) => {
-  try {
-    const { page = 1, limit = 10, search = '' } = req.query;
-    const skip = (Number(page) - 1) * Number(limit);
+// 4. Deletar usuário
+router.delete('/users/:userId', requireAdmin, async (req, res) => {
+    const { userId } = req.params;
     
-    const where = search ? {
-      OR: [
-        { domain: { contains: search as string, mode: 'insensitive' as any } },
-        { domain_type: { contains: search as string, mode: 'insensitive' as any } }
-      ]
-    } : {};
+    const client = new Client({
+        connectionString: process.env.DATABASE_URL,
+        ssl: { rejectUnauthorized: false }
+    });
     
-    const [domains, total] = await Promise.all([
-      prisma.domain_owners.findMany({
-        where,
-        include: {
-          users: {
-            select: {
-              id: true,
-              email: true,
-              role: true
+    try {
+        await client.connect();
+        
+        // Verificar se não é o último admin
+        if (req.user.id === userId) {
+            const adminCount = await client.query(`
+                SELECT COUNT(*) as count FROM auth.users WHERE role = 'admin'
+            `);
+            
+            if (adminCount.rows[0].count <= 1) {
+                return res.status(400).json({ 
+                    error: 'Não é possível deletar o último administrador' 
+                });
             }
-          }
-        },
-        skip,
-        take: Number(limit),
-        orderBy: { created_at: 'desc' }
-      }),
-      prisma.domain_owners.count({ where })
-    ]);
-    
-    res.json({
-      domains,
-      pagination: {
-        page: Number(page),
-        limit: Number(limit),
-        total,
-        pages: Math.ceil(total / Number(limit))
-      }
-    });
-  } catch (error) {
-    console.error('Erro ao buscar domínios:', error);
-    res.status(500).json({ error: 'Erro interno do servidor' });
-  }
-});
-
-router.post('/domains', async (req, res) => {
-  try {
-    const { domain, user_id, domain_type = 'domain' } = req.body;
-    
-    // Validar dados obrigatórios
-    if (!domain || !user_id) {
-      return res.status(400).json({ 
-        error: 'Domínio e ID do usuário são obrigatórios' 
-      });
-    }
-    
-    // Verificar se o usuário existe
-    const user = await prisma.users.findUnique({
-      where: { id: user_id }
-    });
-    
-    if (!user) {
-      return res.status(404).json({ error: 'Usuário não encontrado' });
-    }
-    
-    // Verificar se o domínio já existe
-    const existingDomain = await prisma.domain_owners.findUnique({
-      where: { domain }
-    });
-    
-    if (existingDomain) {
-      return res.status(409).json({ error: 'Domínio já cadastrado' });
-    }
-    
-    // Criar domínio
-    const newDomain = await prisma.domain_owners.create({
-      data: {
-        domain,
-        user_id,
-        domain_type
-      },
-      include: {
-        users: {
-          select: {
-            id: true,
-            email: true,
-            role: true
-          }
         }
-      }
-    });
-    
-    res.status(201).json(newDomain);
-  } catch (error) {
-    console.error('Erro ao criar domínio:', error);
-    res.status(500).json({ error: 'Erro interno do servidor' });
-  }
+        
+        // Deletar em cascata
+        await client.query('DELETE FROM public.store_settings WHERE user_id = $1', [userId]);
+        await client.query('DELETE FROM public.stores WHERE user_id = $1', [userId]);
+        await client.query('DELETE FROM public.domain_owners WHERE user_id = $1', [userId]);
+        await client.query('DELETE FROM public.controller_admins WHERE user_id = $1', [userId]);
+        await client.query('DELETE FROM auth.users WHERE id = $1', [userId]);
+        
+        res.json({ message: 'Usuário deletado com sucesso' });
+        
+    } catch (error) {
+        console.error('Erro ao deletar usuário:', error);
+        res.status(500).json({ error: 'Erro interno do servidor' });
+    } finally {
+        await client.end();
+    }
 });
 
-router.get('/domains/:id', async (req, res) => {
-  try {
-    const domain = await prisma.domain_owners.findUnique({
-      where: { id: req.params.id },
-      include: {
-        users: {
-          select: {
-            id: true,
-            email: true,
-            role: true,
-            created_at: true
-          }
-        }
-      }
+// 5. Listar domínios
+router.get('/domains', requireAdmin, async (req, res) => {
+    const client = new Client({
+        connectionString: process.env.DATABASE_URL,
+        ssl: { rejectUnauthorized: false }
     });
     
-    if (!domain) {
-      return res.status(404).json({ error: 'Domínio não encontrado' });
+    try {
+        await client.connect();
+        
+        const result = await client.query(`
+            SELECT 
+                do.id,
+                do.domain,
+                do.created_at,
+                u.email as owner_email,
+                u.role as owner_role,
+                s.name as store_name,
+                s.slug as store_slug
+            FROM public.domain_owners do
+            LEFT JOIN auth.users u ON do.user_id = u.id
+            LEFT JOIN public.stores s ON do.domain = s.domain
+            ORDER BY do.created_at DESC
+        `);
+        
+        res.json({
+            domains: result.rows,
+            total: result.rows.length
+        });
+    } catch (error) {
+        console.error('Erro ao listar domínios:', error);
+        res.status(500).json({ error: 'Erro interno do servidor' });
+    } finally {
+        await client.end();
     }
-    
-    res.json(domain);
-  } catch (error) {
-    console.error('Erro ao buscar domínio:', error);
-    res.status(500).json({ error: 'Erro interno do servidor' });
-  }
 });
 
-router.put('/domains/:id', async (req, res) => {
-  try {
-    const { domain, user_id, domain_type } = req.body;
-    
-    // Verificar se o domínio existe
-    const existingDomain = await prisma.domain_owners.findUnique({
-      where: { id: req.params.id }
+// 6. Estatísticas gerais
+router.get('/stats', requireAdmin, async (req, res) => {
+    const client = new Client({
+        connectionString: process.env.DATABASE_URL,
+        ssl: { rejectUnauthorized: false }
     });
     
-    if (!existingDomain) {
-      return res.status(404).json({ error: 'Domínio não encontrado' });
+    try {
+        await client.connect();
+        
+        const stats = await client.query(`
+            SELECT 
+                (SELECT COUNT(*) FROM auth.users) as total_users,
+                (SELECT COUNT(*) FROM auth.users WHERE role = 'admin') as total_admins,
+                (SELECT COUNT(*) FROM auth.users WHERE role = 'user') as total_clients,
+                (SELECT COUNT(*) FROM public.domain_owners) as total_domains,
+                (SELECT COUNT(*) FROM public.stores) as total_stores
+        `);
+        
+        res.json(stats.rows[0]);
+    } catch (error) {
+        console.error('Erro ao buscar estatísticas:', error);
+        res.status(500).json({ error: 'Erro interno do servidor' });
+    } finally {
+        await client.end();
     }
-    
-    // Se estiver alterando o domínio, verificar se já existe
-    if (domain && domain !== existingDomain.domain) {
-      const domainExists = await prisma.domain_owners.findUnique({
-        where: { domain }
-      });
-      
-      if (domainExists) {
-        return res.status(409).json({ error: 'Domínio já cadastrado' });
-      }
-    }
-    
-    // Se estiver alterando o usuário, verificar se existe
-    if (user_id && user_id !== existingDomain.user_id) {
-      const user = await prisma.users.findUnique({
-        where: { id: user_id }
-      });
-      
-      if (!user) {
-        return res.status(404).json({ error: 'Usuário não encontrado' });
-      }
-    }
-    
-    // Atualizar domínio
-    const updatedDomain = await prisma.domain_owners.update({
-      where: { id: req.params.id },
-      data: {
-        ...(domain && { domain }),
-        ...(user_id && { user_id }),
-        ...(domain_type && { domain_type }),
-        updated_at: new Date()
-      },
-      include: {
-        users: {
-          select: {
-            id: true,
-            email: true,
-            role: true
-          }
-        }
-      }
-    });
-    
-    res.json(updatedDomain);
-  } catch (error) {
-    console.error('Erro ao atualizar domínio:', error);
-    res.status(500).json({ error: 'Erro interno do servidor' });
-  }
-});
-
-router.delete('/domains/:id', async (req, res) => {
-  try {
-    const domain = await prisma.domain_owners.findUnique({
-      where: { id: req.params.id }
-    });
-    
-    if (!domain) {
-      return res.status(404).json({ error: 'Domínio não encontrado' });
-    }
-    
-    await prisma.domain_owners.delete({
-      where: { id: req.params.id }
-    });
-    
-    res.json({ message: 'Domínio removido com sucesso' });
-  } catch (error) {
-    console.error('Erro ao remover domínio:', error);
-    res.status(500).json({ error: 'Erro interno do servidor' });
-  }
-});
-
-// ===== CADASTRO COMPLETO DE DOMÍNIO E USUÁRIO =====
-router.post('/register-domain-user', async (req, res) => {
-  try {
-    const { 
-      domain, 
-      user_email, 
-      user_password, 
-      user_role = 'admin',
-      domain_type = 'domain',
-      user_id = null // Se fornecido, usa o ID específico
-    } = req.body;
-    
-    // Validar dados obrigatórios
-    if (!domain || !user_email || !user_password) {
-      return res.status(400).json({ 
-        error: 'Domínio, email e senha são obrigatórios' 
-      });
-    }
-    
-    // Verificar se o domínio já existe
-    const existingDomain = await prisma.domain_owners.findUnique({
-      where: { domain }
-    });
-    
-    if (existingDomain) {
-      return res.status(409).json({ error: 'Domínio já cadastrado' });
-    }
-    
-    // Verificar se o email já existe
-    const existingUser = await prisma.users.findFirst({
-      where: { email: user_email }
-    });
-    
-    if (existingUser) {
-      return res.status(409).json({ error: 'Email já cadastrado' });
-    }
-    
-    // Gerar ID do usuário se não fornecido
-    const finalUserId = user_id || crypto.randomUUID();
-    
-    // Criar usuário
-    const newUser = await prisma.users.create({
-      data: {
-        id: finalUserId,
-        email: user_email,
-        encrypted_password: user_password, // Em produção, deve ser hash da senha
-        role: user_role,
-        created_at: new Date(),
-        updated_at: new Date()
-      }
-    });
-    
-    // Criar domínio vinculado ao usuário
-    const newDomain = await prisma.domain_owners.create({
-      data: {
-        domain,
-        user_id: newUser.id,
-        domain_type
-      }
-    });
-    
-    // Retornar dados completos
-    const result = await prisma.domain_owners.findUnique({
-      where: { id: newDomain.id },
-      include: {
-        users: {
-          select: {
-            id: true,
-            email: true,
-            role: true,
-            created_at: true
-          }
-        }
-      }
-    });
-    
-    res.status(201).json({
-      message: 'Domínio e usuário cadastrados com sucesso',
-      domain: result,
-      user: {
-        id: newUser.id,
-        email: newUser.email,
-        role: newUser.role
-      }
-    });
-  } catch (error) {
-    console.error('Erro ao cadastrar domínio e usuário:', error);
-    res.status(500).json({ error: 'Erro interno do servidor' });
-  }
-});
-
-// ===== CONFIGURAÇÕES DO SISTEMA =====
-router.get('/system/config', async (req, res) => {
-  try {
-    // Configurações gerais do sistema
-    const config = {
-      environment: process.env.NODE_ENV || 'development',
-      database: {
-        url: process.env.DATABASE_URL ? 'configured' : 'not configured',
-        type: 'postgresql'
-      },
-      supabase: {
-        url: process.env.SUPABASE_URL ? 'configured' : 'not configured',
-        key: process.env.SUPABASE_SERVICE_KEY ? 'configured' : 'not configured'
-      },
-      security: {
-        jwtSecret: process.env.JWT_SECRET ? 'configured' : 'not configured'
-      },
-      server: {
-        port: process.env.PORT || 3000,
-        trustProxy: true
-      }
-    };
-    
-    res.json(config);
-  } catch (error) {
-    console.error('Erro ao buscar configurações:', error);
-    res.status(500).json({ error: 'Erro interno do servidor' });
-  }
-});
-
-// ===== SISTEMA =====
-router.get('/system/status', async (req, res) => {
-  try {
-    // Verificar conexão com banco
-    await prisma.$queryRaw`SELECT 1`;
-    
-    // Estatísticas do sistema
-    const dbStats = await prisma.$queryRaw`
-      SELECT 
-        schemaname,
-        tablename,
-        n_tup_ins as inserts,
-        n_tup_upd as updates,
-        n_tup_del as deletes
-      FROM pg_stat_user_tables
-      ORDER BY n_tup_ins DESC
-    `;
-    
-    res.json({
-      status: 'online',
-      database: 'connected',
-      timestamp: new Date().toISOString(),
-      dbStats
-    });
-  } catch (error) {
-    console.error('Erro ao verificar status do sistema:', error);
-    res.status(500).json({ 
-      status: 'error',
-      error: 'Erro interno do servidor'
-    });
-  }
 });
 
 export default router; 
