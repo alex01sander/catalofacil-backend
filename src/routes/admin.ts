@@ -279,7 +279,7 @@ router.delete('/users/:userId', requireAdmin, async (req, res) => {
         await client.connect();
         
         // Verificar se não é o último admin
-        if (req.user.id === userId) {
+        if (req.user?.id === userId) {
             const adminCount = await client.query(`
                 SELECT COUNT(*) as count FROM auth.users WHERE role = 'admin'
             `);
