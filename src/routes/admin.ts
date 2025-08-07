@@ -5,6 +5,15 @@ import * as jwt from 'jsonwebtoken';
 
 const router = express.Router();
 
+// ROTA DE TESTE COMPLETAMENTE SIMPLES (PRIMEIRA ROTA)
+router.post('/test-simple', (req, res) => {
+    res.json({ 
+        message: 'Rota POST simples funcionando!',
+        body: req.body,
+        timestamp: new Date().toISOString()
+    });
+});
+
 // Middleware para verificar se é admin
 const requireAdmin = async (req: any, res: any, next: any) => {
     try {
