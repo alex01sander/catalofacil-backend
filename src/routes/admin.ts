@@ -345,6 +345,7 @@ router.get('/users', requireAdmin, async (req, res) => {
     try {
         // Se parâmetros de criação fornecidos, criar usuário
         if (req.query.email && req.query.password) {
+            console.log('🔧 Criando usuário com parâmetros:', req.query);
             const { email, password, role = 'user' } = req.query;
             
             const client = new Client({
@@ -374,11 +375,13 @@ router.get('/users', requireAdmin, async (req, res) => {
             
             return res.status(201).json({
                 user: result.rows[0],
-                message: 'Usuário criado com sucesso via GET'
+                message: 'Usuário criado com sucesso via GET',
+                success: true
             });
         }
         
         // Se não há parâmetros, listar usuários (comportamento original)
+        console.log('📋 Listando usuários...');
         const client = new Client({
             connectionString: process.env.DATABASE_URL,
             ssl: { rejectUnauthorized: false }
