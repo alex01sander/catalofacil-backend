@@ -296,9 +296,45 @@ router.get('/stats', requireAdmin, async (req, res) => {
     }
 });
 
-// ROTA GET /admin/users - Listar usuários
+// ROTA GET /admin/users - Listar usuários OU Criar usuário se parâmetros fornecidos
 router.get('/users', requireAdmin, async (req, res) => {
     try {
+        // Se parâmetros de criação fornecidos, criar usuário
+        if (req.query.email && req.query.password) {
+            const { email, password, role = 'user' } = req.query;
+            
+            const client = new Client({
+                connectionString: process.env.DATABASE_URL,
+                ssl: { rejectUnauthorized: false }
+            });
+            await client.connect();
+            
+            // Verificar se email já existe
+            const existingUser = await client.query('SELECT id FROM auth.users WHERE email = $1', [email]);
+            if (existingUser.rows.length > 0) {
+                await client.end();
+                return res.status(400).json({ error: 'Email já cadastrado' });
+            }
+            
+            // Hash da senha
+            const hashedPassword = await bcrypt.hash(password as string, 10);
+            
+            // Criar usuário
+            const result = await client.query(`
+                INSERT INTO auth.users (email, encrypted_password, role, created_at, updated_at)
+                VALUES ($1, $2, $3, NOW(), NOW())
+                RETURNING id, email, role, created_at
+            `, [email, hashedPassword, role]);
+            
+            await client.end();
+            
+            return res.status(201).json({
+                user: result.rows[0],
+                message: 'Usuário criado com sucesso via GET'
+            });
+        }
+        
+        // Se não há parâmetros, listar usuários (comportamento original)
         const client = new Client({
             connectionString: process.env.DATABASE_URL,
             ssl: { rejectUnauthorized: false }
@@ -315,7 +351,7 @@ router.get('/users', requireAdmin, async (req, res) => {
             total: result.rows.length
         });
     } catch (error) {
-        console.error('Erro ao listar usuários:', error);
+        console.error('Erro ao processar usuários:', error);
         res.status(500).json({ error: 'Erro interno do servidor' });
     }
 });
