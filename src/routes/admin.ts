@@ -91,6 +91,25 @@ router.get('/stats-simple', requireAdmin, async (req, res) => {
     });
 });
 
+// 1.3. Rota POST de teste simples
+router.post('/test-post', requireAdmin, async (req, res) => {
+    res.json({ 
+        message: 'Rota POST de teste funcionando!',
+        body: req.body,
+        timestamp: new Date().toISOString(),
+        user: req.user
+    });
+});
+
+// 1.4. Rota POST sem middleware para teste
+router.post('/test-post-no-auth', async (req, res) => {
+    res.json({ 
+        message: 'Rota POST sem auth funcionando!',
+        body: req.body,
+        timestamp: new Date().toISOString()
+    });
+});
+
 // 2. Listar todos os usuários
 router.get('/users', requireAdmin, async (req, res) => {
     const client = new Client({
