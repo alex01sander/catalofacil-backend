@@ -100,7 +100,7 @@ router.get('/users', requireAdmin, async (req, res) => {
     }
 });
 
-// ROTA POST /admin/users - Criar usuário
+// ROTA POST /admin/users - Criar usuário (FORÇAR NOVO DEPLOY)
 router.post('/users', requireAdmin, async (req, res) => {
     try {
         const { email, password, role = 'user' } = req.body;
