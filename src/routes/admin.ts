@@ -110,6 +110,16 @@ router.post('/test-post-no-auth', async (req, res) => {
     });
 });
 
+// 1.5. Rota POST simples com middleware
+router.post('/test-post-simple', requireAdmin, async (req, res) => {
+    res.json({ 
+        message: 'Rota POST simples funcionando!',
+        body: req.body,
+        timestamp: new Date().toISOString(),
+        user: req.user
+    });
+});
+
 // 2. Listar todos os usuários
 router.get('/users', requireAdmin, async (req, res) => {
     const client = new Client({
