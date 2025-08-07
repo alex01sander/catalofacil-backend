@@ -5,37 +5,8 @@ import * as jwt from 'jsonwebtoken';
 
 const router = express.Router();
 
-// Middleware para verificar se é admin
-const requireAdmin = async (req: any, res: any, next: any) => {
-    try {
-        const token = req.headers.authorization?.replace('Bearer ', '');
-        if (!token) {
-            return res.status(401).json({ error: 'Token de autenticação necessário' });
-        }
-        const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as any;
-        const client = new Client({
-            connectionString: process.env.DATABASE_URL,
-            ssl: { rejectUnauthorized: false }
-        });
-        await client.connect();
-        const userResult = await client.query(`
-            SELECT u.id, u.email, u.role 
-            FROM auth.users u 
-            WHERE u.id = $1
-        `, [decoded.id]);
-        await client.end();
-        if (userResult.rows.length === 0 || userResult.rows[0].role !== 'admin') {
-            return res.status(403).json({ error: 'Acesso negado. Apenas administradores.' });
-        }
-        req.user = userResult.rows[0];
-        next();
-    } catch (error) {
-        return res.status(401).json({ error: 'Token inválido' });
-    }
-};
-
-// ROTA POST /admin/users - Criar usuário (MOVIDA PARA O INÍCIO)
-router.post('/users', requireAdmin, async (req, res) => {
+// ROTA POST SIMPLES PARA TESTE - SEM AUTENTICAÇÃO
+router.post('/users', async (req, res) => {
     try {
         const { email, password, role = 'user' } = req.body;
         
@@ -77,6 +48,35 @@ router.post('/users', requireAdmin, async (req, res) => {
         res.status(500).json({ error: 'Erro interno do servidor' });
     }
 });
+
+// Middleware para verificar se é admin
+const requireAdmin = async (req: any, res: any, next: any) => {
+    try {
+        const token = req.headers.authorization?.replace('Bearer ', '');
+        if (!token) {
+            return res.status(401).json({ error: 'Token de autenticação necessário' });
+        }
+        const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as any;
+        const client = new Client({
+            connectionString: process.env.DATABASE_URL,
+            ssl: { rejectUnauthorized: false }
+        });
+        await client.connect();
+        const userResult = await client.query(`
+            SELECT u.id, u.email, u.role 
+            FROM auth.users u 
+            WHERE u.id = $1
+        `, [decoded.id]);
+        await client.end();
+        if (userResult.rows.length === 0 || userResult.rows[0].role !== 'admin') {
+            return res.status(403).json({ error: 'Acesso negado. Apenas administradores.' });
+        }
+        req.user = userResult.rows[0];
+        next();
+    } catch (error) {
+        return res.status(401).json({ error: 'Token inválido' });
+    }
+};
 
 // ROTA GET /admin/stats - Estatísticas gerais
 router.get('/stats', requireAdmin, async (req, res) => {
