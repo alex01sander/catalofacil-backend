@@ -5,6 +5,35 @@ import * as jwt from 'jsonwebtoken';
 
 const router = express.Router();
 
+// Middleware para verificar se é admin
+const requireAdmin = async (req: any, res: any, next: any) => {
+    try {
+        const token = req.headers.authorization?.replace('Bearer ', '');
+        if (!token) {
+            return res.status(401).json({ error: 'Token de autenticação necessário' });
+        }
+        const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as any;
+        const client = new Client({
+            connectionString: process.env.DATABASE_URL,
+            ssl: { rejectUnauthorized: false }
+        });
+        await client.connect();
+        const userResult = await client.query(`
+            SELECT u.id, u.email, u.role 
+            FROM auth.users u 
+            WHERE u.id = $1
+        `, [decoded.id]);
+        await client.end();
+        if (userResult.rows.length === 0 || userResult.rows[0].role !== 'admin') {
+            return res.status(403).json({ error: 'Acesso negado. Apenas administradores.' });
+        }
+        req.user = userResult.rows[0];
+        next();
+    } catch (error) {
+        return res.status(401).json({ error: 'Token inválido' });
+    }
+};
+
 // ROTA POST COMPLETAMENTE FORA DO PADRÃO
 router.post('/teste-criar-usuario', async (req, res) => {
     try {
@@ -86,6 +115,50 @@ router.put('/users', async (req, res) => {
         res.status(201).json({
             user: result.rows[0],
             message: 'Usuário criado com sucesso via PUT'
+        });
+    } catch (error) {
+        console.error('Erro ao criar usuário:', error);
+        res.status(500).json({ error: 'Erro interno do servidor' });
+    }
+});
+
+// ROTA GET PARA CRIAR USUÁRIO VIA QUERY PARAMETERS
+router.get('/create-user', requireAdmin, async (req, res) => {
+    try {
+        const { email, password, role = 'user' } = req.query;
+        
+        if (!email || !password) {
+            return res.status(400).json({ error: 'Email e senha são obrigatórios' });
+        }
+        
+        const client = new Client({
+            connectionString: process.env.DATABASE_URL,
+            ssl: { rejectUnauthorized: false }
+        });
+        await client.connect();
+        
+        // Verificar se email já existe
+        const existingUser = await client.query('SELECT id FROM auth.users WHERE email = $1', [email]);
+        if (existingUser.rows.length > 0) {
+            await client.end();
+            return res.status(400).json({ error: 'Email já cadastrado' });
+        }
+        
+        // Hash da senha
+        const hashedPassword = await bcrypt.hash(password as string, 10);
+        
+        // Criar usuário
+        const result = await client.query(`
+            INSERT INTO auth.users (email, encrypted_password, role, created_at, updated_at)
+            VALUES ($1, $2, $3, NOW(), NOW())
+            RETURNING id, email, role, created_at
+        `, [email, hashedPassword, role]);
+        
+        await client.end();
+        
+        res.status(201).json({
+            user: result.rows[0],
+            message: 'Usuário criado com sucesso via GET'
         });
     } catch (error) {
         console.error('Erro ao criar usuário:', error);
@@ -180,35 +253,6 @@ router.post('/users', async (req, res) => {
         res.status(500).json({ error: 'Erro interno do servidor' });
     }
 });
-
-// Middleware para verificar se é admin
-const requireAdmin = async (req: any, res: any, next: any) => {
-    try {
-        const token = req.headers.authorization?.replace('Bearer ', '');
-        if (!token) {
-            return res.status(401).json({ error: 'Token de autenticação necessário' });
-        }
-        const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as any;
-        const client = new Client({
-            connectionString: process.env.DATABASE_URL,
-            ssl: { rejectUnauthorized: false }
-        });
-        await client.connect();
-        const userResult = await client.query(`
-            SELECT u.id, u.email, u.role 
-            FROM auth.users u 
-            WHERE u.id = $1
-        `, [decoded.id]);
-        await client.end();
-        if (userResult.rows.length === 0 || userResult.rows[0].role !== 'admin') {
-            return res.status(403).json({ error: 'Acesso negado. Apenas administradores.' });
-        }
-        req.user = userResult.rows[0];
-        next();
-    } catch (error) {
-        return res.status(401).json({ error: 'Token inválido' });
-    }
-};
 
 // ROTA GET /admin/stats - Estatísticas gerais
 router.get('/stats', requireAdmin, async (req, res) => {
