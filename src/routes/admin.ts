@@ -14,6 +14,15 @@ router.post('/test-simple', (req, res) => {
     });
 });
 
+// ROTA DE TESTE SEM AUTENTICAÇÃO
+router.post('/test-no-auth', (req, res) => {
+    res.json({ 
+        message: 'Rota POST sem autenticação funcionando!',
+        body: req.body,
+        timestamp: new Date().toISOString()
+    });
+});
+
 // Middleware para verificar se é admin
 const requireAdmin = async (req: any, res: any, next: any) => {
     try {
