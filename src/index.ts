@@ -161,6 +161,15 @@ app.get('/health', (req: Request, res: Response) => {
   });
 });
 
+// ROTA DE TESTE POST DIRETAMENTE NO INDEX
+app.post('/test-post', (req: Request, res: Response) => {
+  res.json({ 
+    message: 'Rota POST de teste funcionando!',
+    body: req.body,
+    timestamp: new Date().toISOString()
+  });
+});
+
 // Endpoint para estatísticas do cache
 app.get('/cache-stats', basicRateLimit, (req: Request, res: Response) => {
   const stats = getCacheStats();
