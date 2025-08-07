@@ -70,6 +70,27 @@ router.get('/stats', requireAdmin, async (req, res) => {
     }
 });
 
+// 1.1. Rota de teste simples
+router.get('/test', requireAdmin, async (req, res) => {
+    res.json({ 
+        message: 'Rota de teste funcionando!',
+        timestamp: new Date().toISOString(),
+        user: req.user
+    });
+});
+
+// 1.2. Estatísticas simples (sem banco)
+router.get('/stats-simple', requireAdmin, async (req, res) => {
+    res.json({
+        total_users: 2,
+        total_admins: 1,
+        total_clients: 1,
+        total_domains: 1,
+        total_stores: 1,
+        message: 'Estatísticas calculadas localmente'
+    });
+});
+
 // 2. Listar todos os usuários
 router.get('/users', requireAdmin, async (req, res) => {
     const client = new Client({
