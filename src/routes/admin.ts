@@ -42,7 +42,35 @@ const requireAdmin = async (req: any, res: any, next: any) => {
     }
 };
 
-// 1. Listar todos os usuários
+// 1. Estatísticas gerais (PRIMEIRA ROTA - para evitar conflitos)
+router.get('/stats', requireAdmin, async (req, res) => {
+    const client = new Client({
+        connectionString: process.env.DATABASE_URL,
+        ssl: { rejectUnauthorized: false }
+    });
+    
+    try {
+        await client.connect();
+        
+        const stats = await client.query(`
+            SELECT 
+                (SELECT COUNT(*) FROM auth.users) as total_users,
+                (SELECT COUNT(*) FROM auth.users WHERE role = 'admin') as total_admins,
+                (SELECT COUNT(*) FROM auth.users WHERE role = 'user') as total_clients,
+                (SELECT COUNT(*) FROM public.domain_owners) as total_domains,
+                (SELECT COUNT(*) FROM public.stores) as total_stores
+        `);
+        
+        res.json(stats.rows[0]);
+    } catch (error) {
+        console.error('Erro ao buscar estatísticas:', error);
+        res.status(500).json({ error: 'Erro interno do servidor' });
+    } finally {
+        await client.end();
+    }
+});
+
+// 2. Listar todos os usuários
 router.get('/users', requireAdmin, async (req, res) => {
     const client = new Client({
         connectionString: process.env.DATABASE_URL,
@@ -80,7 +108,7 @@ router.get('/users', requireAdmin, async (req, res) => {
     }
 });
 
-// 2. Cadastrar novo usuário
+// 3. Cadastrar novo usuário
 router.post('/users', requireAdmin, async (req, res) => {
     const { email, password, domain, role = 'user' } = req.body;
     
@@ -198,7 +226,7 @@ router.post('/users', requireAdmin, async (req, res) => {
     }
 });
 
-// 3. Atualizar usuário
+// 4. Atualizar usuário
 router.put('/users/:userId', requireAdmin, async (req, res) => {
     const { userId } = req.params;
     const { email, role, domain } = req.body;
@@ -266,7 +294,7 @@ router.put('/users/:userId', requireAdmin, async (req, res) => {
     }
 });
 
-// 4. Deletar usuário
+// 5. Deletar usuário
 router.delete('/users/:userId', requireAdmin, async (req, res) => {
     const { userId } = req.params;
     
@@ -308,7 +336,7 @@ router.delete('/users/:userId', requireAdmin, async (req, res) => {
     }
 });
 
-// 5. Listar domínios
+// 6. Listar domínios
 router.get('/domains', requireAdmin, async (req, res) => {
     const client = new Client({
         connectionString: process.env.DATABASE_URL,
@@ -339,34 +367,6 @@ router.get('/domains', requireAdmin, async (req, res) => {
         });
     } catch (error) {
         console.error('Erro ao listar domínios:', error);
-        res.status(500).json({ error: 'Erro interno do servidor' });
-    } finally {
-        await client.end();
-    }
-});
-
-// 6. Estatísticas gerais
-router.get('/stats', requireAdmin, async (req, res) => {
-    const client = new Client({
-        connectionString: process.env.DATABASE_URL,
-        ssl: { rejectUnauthorized: false }
-    });
-    
-    try {
-        await client.connect();
-        
-        const stats = await client.query(`
-            SELECT 
-                (SELECT COUNT(*) FROM auth.users) as total_users,
-                (SELECT COUNT(*) FROM auth.users WHERE role = 'admin') as total_admins,
-                (SELECT COUNT(*) FROM auth.users WHERE role = 'user') as total_clients,
-                (SELECT COUNT(*) FROM public.domain_owners) as total_domains,
-                (SELECT COUNT(*) FROM public.stores) as total_stores
-        `);
-        
-        res.json(stats.rows[0]);
-    } catch (error) {
-        console.error('Erro ao buscar estatísticas:', error);
         res.status(500).json({ error: 'Erro interno do servidor' });
     } finally {
         await client.end();
