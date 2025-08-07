@@ -161,6 +161,15 @@ app.get('/health', (req: Request, res: Response) => {
   });
 });
 
+// NOVA ROTA POST DE TESTE
+app.post('/teste-post', (req: Request, res: Response) => {
+  res.json({ 
+    message: 'Nova rota POST de teste funcionando!',
+    body: req.body,
+    timestamp: new Date().toISOString()
+  });
+});
+
 // ROTA DE TESTE POST DIRETAMENTE NO INDEX
 app.post('/test-post', (req: Request, res: Response) => {
   res.json({ 
