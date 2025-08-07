@@ -25,13 +25,19 @@ router.post('/test-no-auth', (req, res) => {
 
 // Middleware para verificar se é admin
 const requireAdmin = async (req: any, res: any, next: any) => {
+    console.log('🔍 Middleware requireAdmin executado para:', req.path);
+    console.log('🔍 Método:', req.method);
+    console.log('🔍 Headers:', req.headers);
+    
     try {
         const token = req.headers.authorization?.replace('Bearer ', '');
         if (!token) {
+            console.log('❌ Token não fornecido');
             return res.status(401).json({ error: 'Token não fornecido' });
         }
 
         const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as any;
+        console.log('✅ Token decodificado:', decoded);
         
         // Verificar se é admin
         const client = new Client({
@@ -50,12 +56,15 @@ const requireAdmin = async (req: any, res: any, next: any) => {
         await client.end();
         
         if (userResult.rows.length === 0 || userResult.rows[0].role !== 'admin') {
+            console.log('❌ Usuário não é admin:', userResult.rows[0]);
             return res.status(403).json({ error: 'Acesso negado. Apenas administradores.' });
         }
         
+        console.log('✅ Usuário é admin:', userResult.rows[0]);
         req.user = userResult.rows[0];
         next();
     } catch (error) {
+        console.log('❌ Erro no middleware:', error);
         return res.status(401).json({ error: 'Token inválido' });
     }
 };
