@@ -325,6 +325,8 @@ app.use('*', (req: Request, res: Response) => {
       !req.path.startsWith('/categories/') &&
       !req.path.startsWith('/stores/') &&
       !req.path.startsWith('/site/') &&
+      !req.path.startsWith('/admin-management') &&
+      !req.path.startsWith('/controller') &&
       !req.path.startsWith('/health') &&
       !req.path.startsWith('/cache-stats') &&
       req.path !== '/' &&
