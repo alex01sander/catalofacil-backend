@@ -1,0 +1,5 @@
+[33m76ae083[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m)[m Ajuste na rota adm no controller para registrar usuario
+[33mddceef9[m Adicionar logs e melhorar rota GET /admin/users para criação
+[33m0931d6f[m Adicionar rota GET /criar-usuario diretamente no index.ts
+[33mcca6b6b[m Adicionar rota GET /criar-usuario
+[33mf15fd69[m Modificar rota GET /admin/users para aceitar criação via query parameters

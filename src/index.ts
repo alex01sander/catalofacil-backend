@@ -37,6 +37,7 @@ import creditAccountsRouter from './routes/creditAccounts';
 import creditTransactionsRouter from './routes/creditTransactions';
 import customersRouter from './routes/customers';
 import adminRouter from './routes/admin';
+import adminManagementRouter from './routes/adminManagement';
 import controllerRouter from './routes/controller';
 
 // Importar middlewares de otimização
@@ -295,8 +296,8 @@ app.use('/admin', adminRouter);
 app.use('/api/admin', adminRouter); // Alias para compatibilidade com frontend
 
 // Rotas de gerenciamento de usuários e domínios (apenas para admins)
-app.use('/admin-management', adminRouter);
-app.use('/api/admin-management', adminRouter); // Alias para compatibilidade com frontend
+app.use('/admin-management', adminManagementRouter);
+app.use('/api/admin-management', adminManagementRouter); // Alias para compatibilidade com frontend
 
 // Controller Admin Dashboard (apenas para admins)
 app.use('/controller', controllerRouter);
