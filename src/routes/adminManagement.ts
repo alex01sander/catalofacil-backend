@@ -1,4 +1,4 @@
-import express, { Request, Response } from 'express';
+import express from 'express';
 import { Client } from 'pg';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
