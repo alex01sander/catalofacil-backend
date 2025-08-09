@@ -34,7 +34,7 @@ const requireAdmin = async (req: any, res: any, next: any) => {
         console.log('🔑 Token recebido (primeiros 20 chars):', token.substring(0, 20));
         
         const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as any;
-        console.log('🔍 Token decodificado:', { id: decoded.id, email: decoded.email });
+        console.log('🔍 Token decodificado completo:', decoded);
         
         // Usar apenas Prisma para consistência - Priorizar decoded.id
         const userId = decoded.id || decoded.userId;
