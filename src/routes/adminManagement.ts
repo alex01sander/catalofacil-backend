@@ -1,5 +1,4 @@
 import * as express from 'express';
-import { Client } from 'pg';
 import * as bcrypt from 'bcrypt';
 import * as jwt from 'jsonwebtoken';
 import { Prisma } from '@prisma/client';
@@ -7,7 +6,24 @@ import prisma from '../lib/prisma';
 
 const router = express.Router();
 
-// Middleware para verificar se é admin
+// Interfaces para tipos seguros
+interface SafeUser {
+    id: string;
+    email: string;
+    role: string;
+    created_at?: Date | null;
+    updated_at?: Date | null;
+}
+
+interface SafeDomain {
+    id: string;
+    domain: string;
+    user_id: string;
+    user_email: string | null;
+    created_at: Date | null;
+}
+
+// Middleware para verificar se é admin - VERSÃO CORRIGIDA usando apenas Prisma
 const requireAdmin = async (req: any, res: any, next: any) => {
     try {
         const token = req.headers.authorization?.replace('Bearer ', '');
@@ -17,8 +33,8 @@ const requireAdmin = async (req: any, res: any, next: any) => {
         
         const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as any;
         
-        // Usar Prisma em vez de conexão direta
-        const user = await prisma.users.findUnique({
+        // Usar apenas Prisma para consistência
+        const user = await prisma.users.findFirst({
             where: { id: decoded.userId || decoded.id },
             select: {
                 id: true,
@@ -27,14 +43,30 @@ const requireAdmin = async (req: any, res: any, next: any) => {
             }
         });
         
-        if (!user) {
-            return res.status(401).json({ error: 'Usuário não encontrado' });
+        if (!user || !user.email) {
+            return res.status(401).json({ error: 'Usuário não encontrado ou email inválido' });
         }
         
-        // Verificar se é admin
-        const isAdmin = user.role === 'admin' || await prisma.controller_admins.findFirst({
-            where: { user_id: user.id }
-        });
+        // Verificar se é admin - melhorada a verificação
+        let isAdmin = false;
+        
+        // Verifica role diretamente
+        if (user.role === 'admin') {
+            isAdmin = true;
+        } else {
+            // Verifica tabela de admins se existir
+            try {
+                const adminRecord = await prisma.controller_admins.findFirst({
+                    where: { user_id: user.id }
+                });
+                if (adminRecord) {
+                    isAdmin = true;
+                }
+            } catch (error) {
+                // Se a tabela controller_admins não existir, ignora este erro
+                console.warn('Tabela controller_admins não encontrada ou inacessível');
+            }
+        }
         
         if (!isAdmin) {
             return res.status(403).json({ error: 'Acesso negado. Apenas administradores.' });
@@ -48,32 +80,16 @@ const requireAdmin = async (req: any, res: any, next: any) => {
     }
 };
 
-// ROTA GET /admin-management/stats - Estatísticas gerais
+// ROTA GET /admin-management/stats - Estatísticas gerais - REFATORADA para usar Prisma
 router.get('/stats', requireAdmin, async (req, res) => {
     try {
-        const client = new Client({
-            connectionString: process.env.DATABASE_URL,
-            ssl: { rejectUnauthorized: false }
-        });
-        await client.connect();
-        
-        // Contar usuários
-        const usersResult = await client.query('SELECT COUNT(*) as total FROM auth.users');
-        const totalUsers = parseInt(usersResult.rows[0].total);
-        
-        // Contar domínios
-        const domainsResult = await client.query('SELECT COUNT(*) as total FROM public.domain_owners');
-        const totalDomains = parseInt(domainsResult.rows[0].total);
-        
-        // Contar lojas
-        const storesResult = await client.query('SELECT COUNT(*) as total FROM public.stores');
-        const totalStores = parseInt(storesResult.rows[0].total);
-        
-        // Contar produtos
-        const productsResult = await client.query('SELECT COUNT(*) as total FROM public.products');
-        const totalProducts = parseInt(productsResult.rows[0].total);
-        
-        await client.end();
+        // Usar Prisma em vez de conexão direta para consistência
+        const [totalUsers, totalDomains, totalStores, totalProducts] = await Promise.all([
+            prisma.users.count(),
+            prisma.domain_owners.count(),
+            prisma.stores.count(),
+            prisma.products.count()
+        ]);
         
         res.json({
             stats: {
@@ -90,50 +106,55 @@ router.get('/stats', requireAdmin, async (req, res) => {
     }
 });
 
-// ROTA GET /admin-management/users - Listar usuários
+// ROTA GET /admin-management/users - Listar usuários - REFATORADA para usar Prisma
 router.get('/users', requireAdmin, async (req, res) => {
     try {
         const { page = 1, limit = 10, search = '' } = req.query;
-        const skip = (Number(page) - 1) * Number(limit);
+        const pageNum = Number(page);
+        const limitNum = Number(limit);
+        const skip = (pageNum - 1) * limitNum;
         
-        const client = new Client({
-            connectionString: process.env.DATABASE_URL,
-            ssl: { rejectUnauthorized: false }
-        });
-        await client.connect();
+        // Condições de filtro para Prisma
+        const whereCondition = search ? {
+            OR: [
+                { email: { contains: search as string, mode: 'insensitive' as Prisma.QueryMode } },
+                { id: { contains: search as string, mode: 'insensitive' as Prisma.QueryMode } }
+            ]
+        } : {};
         
-        let query = 'SELECT id, email, role, created_at, updated_at FROM auth.users';
-        let countQuery = 'SELECT COUNT(*) as total FROM auth.users';
-        let params: any[] = [];
-        let paramCount = 0;
-        
-        if (search) {
-            paramCount++;
-            query += ` WHERE email ILIKE $${paramCount} OR id ILIKE $${paramCount}`;
-            countQuery += ` WHERE email ILIKE $${paramCount} OR id ILIKE $${paramCount}`;
-            params.push(`%${search}%`);
-        }
-        
-        query += ' ORDER BY created_at DESC';
-        query += ` LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`;
-        params.push(Number(limit), skip);
-        
-        const [result, countResult] = await Promise.all([
-            client.query(query, params),
-            client.query(countQuery, search ? [params[0]] : [])
+        const [users, total] = await Promise.all([
+            prisma.users.findMany({
+                where: whereCondition,
+                select: {
+                    id: true,
+                    email: true,
+                    role: true,
+                    created_at: true,
+                    updated_at: true
+                },
+                orderBy: { created_at: 'desc' },
+                skip: skip,
+                take: limitNum
+            }),
+            prisma.users.count({ where: whereCondition })
         ]);
         
-        await client.end();
-        
-        const total = parseInt(countResult.rows[0].total);
+        // Filtrar campos null para compatibilidade
+        const sanitizedUsers: SafeUser[] = users.map(user => ({
+            id: user.id,
+            email: user.email || '',
+            role: user.role || 'user',
+            created_at: user.created_at,
+            updated_at: user.updated_at
+        }));
         
         res.json({
-            users: result.rows,
+            users: sanitizedUsers,
             pagination: {
-                page: Number(page),
-                limit: Number(limit),
+                page: pageNum,
+                limit: limitNum,
                 total,
-                pages: Math.ceil(total / Number(limit))
+                pages: Math.ceil(total / limitNum)
             }
         });
     } catch (error) {
@@ -142,42 +163,47 @@ router.get('/users', requireAdmin, async (req, res) => {
     }
 });
 
-// ROTA POST /admin-management/users - Criar usuário
+// ROTA POST /admin-management/users - Criar usuário - REFATORADA para usar Prisma
 router.post('/users', requireAdmin, async (req, res) => {
     try {
         const { email, password, role = 'user' } = req.body;
+        
+        // Verificar se email já existe
+        const existingUser = await prisma.users.findFirst({
+            where: { email }
+        });
+        
+        if (existingUser) {
+            return res.status(400).json({ error: 'Email já cadastrado' });
+        }
         
         if (!email || !password) {
             return res.status(400).json({ error: 'Email e senha são obrigatórios' });
         }
         
-        const client = new Client({
-            connectionString: process.env.DATABASE_URL,
-            ssl: { rejectUnauthorized: false }
-        });
-        await client.connect();
-        
-        // Verificar se email já existe
-        const existingUser = await client.query('SELECT id FROM auth.users WHERE email = $1', [email]);
-        if (existingUser.rows.length > 0) {
-            await client.end();
-            return res.status(400).json({ error: 'Email já cadastrado' });
-        }
-        
         // Hash da senha
         const hashedPassword = await bcrypt.hash(password, 10);
         
-        // Criar usuário
-        const result = await client.query(`
-            INSERT INTO auth.users (email, encrypted_password, role, created_at, updated_at)
-            VALUES ($1, $2, $3, NOW(), NOW())
-            RETURNING id, email, role, created_at
-        `, [email, hashedPassword, role]);
-        
-        await client.end();
+        // Criar usuário usando Prisma
+        const user = await prisma.users.create({
+            data: {
+                id: `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`, // Gerar ID único
+                email,
+                encrypted_password: hashedPassword,
+                role,
+                created_at: new Date(),
+                updated_at: new Date()
+            },
+            select: {
+                id: true,
+                email: true,
+                role: true,
+                created_at: true
+            }
+        });
         
         res.status(201).json({
-            user: result.rows[0],
+            user,
             message: 'Usuário criado com sucesso'
         });
     } catch (error) {
@@ -186,33 +212,47 @@ router.post('/users', requireAdmin, async (req, res) => {
     }
 });
 
-// ROTA PUT /admin-management/users/:id - Atualizar usuário
+// ROTA PUT /admin-management/users/:id - Atualizar usuário - REFATORADA para usar Prisma
 router.put('/users/:id', requireAdmin, async (req, res) => {
     try {
         const { id } = req.params;
         const { email, role } = req.body;
         
-        const client = new Client({
-            connectionString: process.env.DATABASE_URL,
-            ssl: { rejectUnauthorized: false }
+        if (!email || !role) {
+            return res.status(400).json({ error: 'Email e role são obrigatórios' });
+        }
+        
+        const user = await prisma.users.updateMany({
+            where: { id },
+            data: {
+                email,
+                role,
+                updated_at: new Date()
+            }
         });
-        await client.connect();
         
-        const result = await client.query(`
-            UPDATE auth.users 
-            SET email = $1, role = $2, updated_at = NOW()
-            WHERE id = $3
-            RETURNING id, email, role, updated_at
-        `, [email, role, id]);
-        
-        await client.end();
-        
-        if (result.rows.length === 0) {
+        if (user.count === 0) {
             return res.status(404).json({ error: 'Usuário não encontrado' });
         }
         
+        // Buscar o usuário atualizado para retornar
+        const updatedUser = await prisma.users.findFirst({
+            where: { id },
+            select: {
+                id: true,
+                email: true,
+                role: true,
+                updated_at: true
+            }
+        });
+        
         res.json({
-            user: result.rows[0],
+            user: {
+                id: updatedUser?.id || id,
+                email: updatedUser?.email || email,
+                role: updatedUser?.role || role,
+                updated_at: updatedUser?.updated_at || new Date()
+            } as SafeUser,
             message: 'Usuário atualizado com sucesso'
         });
     } catch (error) {
@@ -221,21 +261,16 @@ router.put('/users/:id', requireAdmin, async (req, res) => {
     }
 });
 
-// ROTA DELETE /admin-management/users/:id - Deletar usuário
+// ROTA DELETE /admin-management/users/:id - Deletar usuário - REFATORADA para usar Prisma
 router.delete('/users/:id', requireAdmin, async (req, res) => {
     try {
         const { id } = req.params;
         
-        const client = new Client({
-            connectionString: process.env.DATABASE_URL,
-            ssl: { rejectUnauthorized: false }
+        const deletedUser = await prisma.users.deleteMany({
+            where: { id }
         });
-        await client.connect();
         
-        const result = await client.query('DELETE FROM auth.users WHERE id = $1 RETURNING id', [id]);
-        await client.end();
-        
-        if (result.rows.length === 0) {
+        if (deletedUser.count === 0) {
             return res.status(404).json({ error: 'Usuário não encontrado' });
         }
         
@@ -246,24 +281,72 @@ router.delete('/users/:id', requireAdmin, async (req, res) => {
     }
 });
 
-// ROTA GET /admin-management/domains - Listar domínios
+// ROTA GET /admin-management/domains - Listar domínios - VERSÃO COMPATÍVEL
 router.get('/domains', requireAdmin, async (req, res) => {
     try {
-        const client = new Client({
-            connectionString: process.env.DATABASE_URL,
-            ssl: { rejectUnauthorized: false }
-        });
-        await client.connect();
-        const result = await client.query(`
-            SELECT do.id, do.domain, do.user_id, u.email as user_email, do.created_at
-            FROM public.domain_owners do
-            JOIN auth.users u ON do.user_id = u.id
-            ORDER BY do.created_at DESC
-        `);
-        await client.end();
+        // Tentar primeiro com include, se falhar usar join manual
+        let domains;
+        let mappedDomains;
+        
+        try {
+            domains = await prisma.domain_owners.findMany({
+                include: {
+                    users: {
+                        select: {
+                            email: true
+                        }
+                    }
+                },
+                orderBy: { created_at: 'desc' }
+            });
+            
+            mappedDomains = domains.map(domain => ({
+                id: domain.id,
+                domain: domain.domain || '',
+                user_id: domain.user_id || '',
+                user_email: domain.users?.email || null,
+                created_at: domain.created_at
+            }));
+        } catch (includeError) {
+            // Se o include falhar, fazer join manual
+            console.warn('Include falhou, usando busca manual:', includeError);
+            
+            domains = await prisma.domain_owners.findMany({
+                orderBy: { created_at: 'desc' }
+            });
+            
+            // Buscar emails dos usuários manualmente
+            const userIds = domains.map(d => d.user_id).filter(Boolean);
+            const users = await prisma.users.findMany({
+                where: {
+                    id: { in: userIds }
+                },
+                select: {
+                    id: true,
+                    email: true
+                }
+            });
+            
+            // Criar um mapa de user_id -> email (filtrando nulls)
+            const userEmailMap = users.reduce((acc, user) => {
+                if (user.email) {
+                    acc[user.id] = user.email;
+                }
+                return acc;
+            }, {} as Record<string, string>);
+            
+            mappedDomains = domains.map(domain => ({
+                id: domain.id,
+                domain: domain.domain || '',
+                user_id: domain.user_id || '',
+                user_email: userEmailMap[domain.user_id] || null,
+                created_at: domain.created_at
+            }));
+        }
+        
         res.json({
-            domains: result.rows,
-            total: result.rows.length
+            domains: mappedDomains,
+            total: mappedDomains.length
         });
     } catch (error) {
         console.error('Erro ao listar domínios:', error);
@@ -271,7 +354,7 @@ router.get('/domains', requireAdmin, async (req, res) => {
     }
 });
 
-// ROTA POST /admin-management/domains - Criar domínio
+// ROTA POST /admin-management/domains - Criar domínio - REFATORADA para usar Prisma
 router.post('/domains', requireAdmin, async (req, res) => {
     try {
         const { domain, user_id } = req.body;
@@ -280,37 +363,38 @@ router.post('/domains', requireAdmin, async (req, res) => {
             return res.status(400).json({ error: 'Domínio e user_id são obrigatórios' });
         }
         
-        const client = new Client({
-            connectionString: process.env.DATABASE_URL,
-            ssl: { rejectUnauthorized: false }
-        });
-        await client.connect();
-        
         // Verificar se domínio já existe
-        const existingDomain = await client.query('SELECT id FROM public.domain_owners WHERE domain = $1', [domain]);
-        if (existingDomain.rows.length > 0) {
-            await client.end();
+        const existingDomain = await prisma.domain_owners.findFirst({
+            where: { domain }
+        });
+        
+        if (existingDomain) {
             return res.status(400).json({ error: 'Domínio já cadastrado' });
         }
         
         // Verificar se usuário existe
-        const existingUser = await client.query('SELECT id FROM auth.users WHERE id = $1', [user_id]);
-        if (existingUser.rows.length === 0) {
-            await client.end();
+        const existingUser = await prisma.users.findFirst({
+            where: { id: user_id }
+        });
+        
+        if (!existingUser) {
             return res.status(400).json({ error: 'Usuário não encontrado' });
         }
         
         // Criar domínio
-        const result = await client.query(`
-            INSERT INTO public.domain_owners (domain, user_id, created_at)
-            VALUES ($1, $2, NOW())
-            RETURNING id, domain, user_id, created_at
-        `, [domain, user_id]);
-        
-        await client.end();
+        const newDomain = await prisma.domain_owners.create({
+            data: {
+                id: `domain_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`, // Gerar ID único
+                domain,
+                user_id,
+                created_at: new Date(),
+                updated_at: new Date(),
+                domain_type: 'manual' // Valor padrão se o campo for obrigatório
+            }
+        });
         
         res.status(201).json({
-            domain: result.rows[0],
+            domain: newDomain,
             message: 'Domínio criado com sucesso'
         });
     } catch (error) {
@@ -319,21 +403,16 @@ router.post('/domains', requireAdmin, async (req, res) => {
     }
 });
 
-// ROTA DELETE /admin-management/domains/:id - Deletar domínio
+// ROTA DELETE /admin-management/domains/:id - Deletar domínio - REFATORADA para usar Prisma
 router.delete('/domains/:id', requireAdmin, async (req, res) => {
     try {
         const { id } = req.params;
         
-        const client = new Client({
-            connectionString: process.env.DATABASE_URL,
-            ssl: { rejectUnauthorized: false }
+        const deletedDomain = await prisma.domain_owners.deleteMany({
+            where: { id }
         });
-        await client.connect();
         
-        const result = await client.query('DELETE FROM public.domain_owners WHERE id = $1 RETURNING id', [id]);
-        await client.end();
-        
-        if (result.rows.length === 0) {
+        if (deletedDomain.count === 0) {
             return res.status(404).json({ error: 'Domínio não encontrado' });
         }
         
