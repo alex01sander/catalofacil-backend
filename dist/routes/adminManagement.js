@@ -48,10 +48,18 @@ const requireAdmin = async (req, res, next) => {
         if (!token) {
             return res.status(401).json({ error: 'Token de autenticação necessário' });
         }
+        console.log('🔑 Token recebido (primeiros 20 chars):', token.substring(0, 20));
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        // Usar apenas Prisma para consistência
+        console.log('🔍 Token decodificado:', { id: decoded.id, email: decoded.email });
+        // Usar apenas Prisma para consistência - Priorizar decoded.id
+        const userId = decoded.id || decoded.userId;
+        if (!userId) {
+            console.error('❌ ID do usuário não encontrado no token:', decoded);
+            return res.status(401).json({ error: 'Token inválido: ID do usuário não encontrado' });
+        }
+        console.log('🔍 Buscando usuário com ID:', userId);
         const user = await prisma_1.default.users.findFirst({
-            where: { id: decoded.userId || decoded.id },
+            where: { id: userId },
             select: {
                 id: true,
                 email: true,
@@ -59,37 +67,47 @@ const requireAdmin = async (req, res, next) => {
             }
         });
         if (!user || !user.email) {
+            console.error('❌ Usuário não encontrado:', { userId });
             return res.status(401).json({ error: 'Usuário não encontrado ou email inválido' });
         }
+        console.log('✅ Usuário encontrado:', { id: user.id, email: user.email, role: user.role });
         // Verificar se é admin - melhorada a verificação
         let isAdmin = false;
         // Verifica role diretamente
         if (user.role === 'admin') {
+            console.log('✅ Usuário é admin por role');
             isAdmin = true;
         }
         else {
             // Verifica tabela de admins se existir
             try {
+                console.log('🔍 Verificando se usuário está na tabela controller_admins');
                 const adminRecord = await prisma_1.default.controller_admins.findFirst({
                     where: { user_id: user.id }
                 });
                 if (adminRecord) {
+                    console.log('✅ Usuário é admin por controller_admins');
                     isAdmin = true;
+                }
+                else {
+                    console.log('❌ Usuário não encontrado na tabela controller_admins');
                 }
             }
             catch (error) {
                 // Se a tabela controller_admins não existir, ignora este erro
-                console.warn('Tabela controller_admins não encontrada ou inacessível');
+                console.warn('⚠️ Tabela controller_admins não encontrada ou inacessível:', error);
             }
         }
         if (!isAdmin) {
+            console.error('❌ Acesso negado para usuário não-admin:', { id: user.id, email: user.email });
             return res.status(403).json({ error: 'Acesso negado. Apenas administradores.' });
         }
+        console.log('✅ Autenticação admin bem-sucedida para:', { id: user.id, email: user.email });
         req.user = user;
         next();
     }
     catch (error) {
-        console.error('Erro na autenticação admin:', error);
+        console.error('❌ Erro na autenticação admin:', error);
         return res.status(401).json({ error: 'Token inválido' });
     }
 };
