@@ -1,7 +1,9 @@
-import express from 'express';
+import * as express from 'express';
 import { Client } from 'pg';
-import bcrypt from 'bcrypt';
-import jwt from 'jsonwebtoken';
+import * as bcrypt from 'bcrypt';
+import * as jwt from 'jsonwebtoken';
+import { Prisma } from '@prisma/client';
+import prisma from '../lib/prisma';
 
 const router = express.Router();
 
@@ -12,24 +14,36 @@ const requireAdmin = async (req: any, res: any, next: any) => {
         if (!token) {
             return res.status(401).json({ error: 'Token de autenticação necessário' });
         }
+        
         const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as any;
-        const client = new Client({
-            connectionString: process.env.DATABASE_URL,
-            ssl: { rejectUnauthorized: false }
+        
+        // Usar Prisma em vez de conexão direta
+        const user = await prisma.users.findUnique({
+            where: { id: decoded.userId || decoded.id },
+            select: {
+                id: true,
+                email: true,
+                role: true
+            }
         });
-        await client.connect();
-        const userResult = await client.query(`
-            SELECT u.id, u.email, u.role 
-            FROM auth.users u 
-            WHERE u.id = $1
-        `, [decoded.id]);
-        await client.end();
-        if (userResult.rows.length === 0 || userResult.rows[0].role !== 'admin') {
+        
+        if (!user) {
+            return res.status(401).json({ error: 'Usuário não encontrado' });
+        }
+        
+        // Verificar se é admin
+        const isAdmin = user.role === 'admin' || await prisma.controller_admins.findFirst({
+            where: { user_id: user.id }
+        });
+        
+        if (!isAdmin) {
             return res.status(403).json({ error: 'Acesso negado. Apenas administradores.' });
         }
-        req.user = userResult.rows[0];
+        
+        req.user = user;
         next();
     } catch (error) {
+        console.error('Erro na autenticação admin:', error);
         return res.status(401).json({ error: 'Token inválido' });
     }
 };
@@ -330,4 +344,4 @@ router.delete('/domains/:id', requireAdmin, async (req, res) => {
     }
 });
 
-export default router; 
+export default router;
